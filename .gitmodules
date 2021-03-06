@@ -1,3 +1,6 @@
 [submodule "third-party/vk-bootstrap"]
 	path = third-party/vk-bootstrap
 	url = https://github.com/charles-lunarg/vk-bootstrap.git
+[submodule "third-party/beyond-core"]
+	path = third-party/beyond-core
+	url = https://github.com/Beyond-Engine/Core.git
