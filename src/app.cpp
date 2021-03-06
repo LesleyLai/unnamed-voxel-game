@@ -55,11 +55,14 @@ App::App()
 
   init_vk_device();
   init_swapchain();
+  init_command();
 }
 
 App::~App()
 {
   if (!device_) { return; }
+
+  vkDestroyCommandPool(device_, command_pool_, nullptr);
 
   for (auto& image_view : swapchain_image_views_) {
     vkDestroyImageView(device_, image_view, nullptr);
@@ -113,7 +116,13 @@ void App::init_vk_device()
     fmt::print("{}\n", device_ret.error().message());
     std::exit(-1);
   }
-  device_ = device_ret->device;
+  auto vkb_device = device_ret.value();
+  device_ = vkb_device.device;
+
+  graphics_queue_ = vkb_device.get_queue(vkb::QueueType::graphics).value();
+  graphics_queue_family_index_ =
+      vkb_device.get_queue_index(vkb::QueueType::graphics).value();
+  present_queue_ = vkb_device.get_queue(vkb::QueueType::present).value();
 }
 
 void App::init_swapchain()
@@ -131,4 +140,27 @@ void App::init_swapchain()
   swapchain_images_ = vkb_swapchain.get_images().value();
   swapchain_image_views_ = vkb_swapchain.get_image_views().value();
   swapchain_image_format_ = vkb_swapchain.image_format;
+}
+
+void App::init_command()
+{
+  const VkCommandPoolCreateInfo command_pool_create_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex = graphics_queue_family_index_,
+  };
+
+  VK_CHECK(vkCreateCommandPool(device_, &command_pool_create_info, nullptr,
+                               &command_pool_));
+
+  const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .pNext = nullptr,
+      .commandPool = command_pool_,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+  };
+  VK_CHECK(vkAllocateCommandBuffers(device_, &command_buffer_allocate_info,
+                                    &main_command_buffer_));
 }

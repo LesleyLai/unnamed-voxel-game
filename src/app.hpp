@@ -17,12 +17,16 @@ class App {
   VkPhysicalDevice physical_device_{};
   VkDevice device_{};
   VkQueue graphics_queue_{};
+  uint32_t graphics_queue_family_index_ = 0;
   VkQueue present_queue_{};
 
   VkSwapchainKHR swapchain_{};
   std::vector<VkImage> swapchain_images_{};
   std::vector<VkImageView> swapchain_image_views_{};
   VkFormat swapchain_image_format_{};
+
+  VkCommandPool command_pool_{};
+  VkCommandBuffer main_command_buffer_{};
 
 public:
   App();
@@ -38,6 +42,7 @@ public:
 private:
   void init_vk_device();
   void init_swapchain();
+  void init_command();
 };
 
 #endif // VOXEL_GAME_APP_HPP
