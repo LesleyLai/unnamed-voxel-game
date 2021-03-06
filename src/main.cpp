@@ -1,8 +1,9 @@
 #include <iostream>
 
-#include "dummy.hpp"
+#include "app.hpp"
 
 auto main() -> int
 {
-  std::cout << fib(10) << '\n';
+  App app;
+  app.exec();
 }

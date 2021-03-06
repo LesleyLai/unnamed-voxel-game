@@ -1,13 +1,12 @@
 add_library(common
-        "${CMAKE_SOURCE_DIR}/include/dummy.hpp"
-        dummy.cpp)
-target_link_libraries(common PRIVATE compiler_options)
+        app.hpp
+        app.cpp)
+target_link_libraries(common
+        PUBLIC
+        CONAN_PKG::fmt
+        CONAN_PKG::glfw
+        PRIVATE compiler_options)
 target_include_directories(common PUBLIC "${CMAKE_SOURCE_DIR}/include")
-
-if (${VOXEL_GAME_BUILD_TESTS_COVERAGE})
-    target_compile_options(common PUBLIC -fprofile-arcs -ftest-coverage)
-    target_link_libraries(common PUBLIC gcov)
-endif ()
 
 add_executable(app "main.cpp")
 target_link_libraries(app
