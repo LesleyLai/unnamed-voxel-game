@@ -13,6 +13,8 @@ macro(run_conan)
     conan_cmake_run(REQUIRES
             fmt/7.1.3
             glfw/3.3.3
+            gsl_microsoft/2.0.0@bincrafters/stable
+            backward-cpp/1.5
             BASIC_SETUP CMAKE_TARGETS
             BUILD missing)
 endmacro()

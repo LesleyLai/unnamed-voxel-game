@@ -41,6 +41,9 @@ class App {
   std::uint32_t frame_number_ = 0;
   FrameData frame_data_{};
 
+  VkPipelineLayout terrain_graphics_pipeline_layout_{};
+  VkPipeline terrain_graphics_pipeline_{};
+
 public:
   App();
   ~App();
@@ -59,6 +62,7 @@ private:
   void init_render_pass();
   void init_framebuffer();
   void init_sync_strucures();
+  void init_pipeline();
 
   void render();
 };

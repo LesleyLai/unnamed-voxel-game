@@ -3,13 +3,19 @@
 #include <VkBootstrap.h>
 #include <fmt/format.h>
 
+#include <beyond/utils/panic.hpp>
+#include <beyond/utils/size.hpp>
+#include <beyond/utils/to_pointer.hpp>
+
+#include "vulkan_helpers/shader_module.hpp"
+
 #define CHECK_GLFW(glfw_call)                                                  \
-  if (!(glfw_call)) { std::exit(1); }
+  if (!(glfw_call)) { beyond::panic("GLFW fatal error\n"); }
 
 #define VK_CHECK(x)                                                            \
   do {                                                                         \
     VkResult err = x;                                                          \
-    if (err) { fmt::print("Vulkan error: {}\n", err); }                        \
+    if (err) { fmt::format("Vulkan error: {}\n", err); }                       \
   } while (0)
 
 namespace {
@@ -56,6 +62,7 @@ App::App()
   init_render_pass();
   init_framebuffer();
   init_sync_strucures();
+  init_pipeline();
 }
 
 App::~App()
@@ -63,6 +70,9 @@ App::~App()
   if (!device_) { return; }
 
   vkDeviceWaitIdle(device_);
+
+  vkDestroyPipeline(device_, terrain_graphics_pipeline_, nullptr);
+  vkDestroyPipelineLayout(device_, terrain_graphics_pipeline_layout_, nullptr);
 
   vkDestroyFence(device_, frame_data_.render_fence_, nullptr);
   vkDestroySemaphore(device_, frame_data_.render_semaphore_, nullptr);
@@ -102,6 +112,7 @@ void App::init_vk_device()
 {
 
   auto instance_ret = vkb::InstanceBuilder{}
+                          .require_api_version(1, 2, 0)
                           .use_default_debug_messenger()
                           .request_validation_layers()
                           .build();
@@ -272,9 +283,127 @@ void App::init_sync_strucures()
                          &frame_data_.render_fence_));
 }
 
+void App::init_pipeline()
+{
+  auto terrain_vert_ret =
+      vkh::create_shader_module(device_, "shaders/terrain.vert.spv");
+  auto terrain_frag_ret =
+      vkh::create_shader_module(device_, "shaders/terrain.frag.spv");
+  auto terrain_vert_shader_module = terrain_vert_ret.value();
+  auto terrain_frag_shader_module = terrain_frag_ret.value();
+
+  const VkPipelineShaderStageCreateInfo shader_stages[] = {
+      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+       .stage = VK_SHADER_STAGE_VERTEX_BIT,
+       .module = terrain_vert_shader_module,
+       .pName = "main"},
+      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+       .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+       .module = terrain_frag_shader_module,
+       .pName = "main"}};
+
+  static constexpr VkPipelineVertexInputStateCreateInfo vertex_input_info{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .vertexBindingDescriptionCount = 0,
+      .vertexAttributeDescriptionCount = 0,
+  };
+
+  static constexpr VkPipelineInputAssemblyStateCreateInfo input_assembly{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .primitiveRestartEnable = VK_FALSE,
+  };
+
+  const VkViewport viewport{
+      .x = 0.0f,
+      .y = static_cast<float>(window_extent_.height),
+      .width = static_cast<float>(window_extent_.width),
+      .height = -static_cast<float>(window_extent_.height),
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+  };
+
+  const VkRect2D scissor{.offset = {0, 0}, .extent = window_extent_};
+
+  const VkPipelineViewportStateCreateInfo viewport_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .pViewports = &viewport,
+      .scissorCount = 1,
+      .pScissors = &scissor,
+  };
+
+  static constexpr VkPipelineRasterizationStateCreateInfo rasterizer{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .depthClampEnable = VK_FALSE,
+      .rasterizerDiscardEnable = VK_FALSE,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_BACK_BIT,
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .depthBiasEnable = VK_FALSE,
+      .lineWidth = 1.0f,
+  };
+
+  static constexpr VkPipelineMultisampleStateCreateInfo multisampling{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+      .sampleShadingEnable = VK_FALSE,
+  };
+
+  static constexpr VkPipelineColorBlendAttachmentState color_blend_attachment{
+      .blendEnable = VK_FALSE,
+      .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+  };
+
+  static constexpr VkPipelineColorBlendStateCreateInfo color_blending{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
+      .logicOp = VK_LOGIC_OP_COPY,
+      .attachmentCount = 1,
+      .pAttachments = &color_blend_attachment,
+      .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
+  };
+
+  VkPipelineLayoutCreateInfo pipeline_layout_info{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 0,
+      .pushConstantRangeCount = 0,
+  };
+
+  if (vkCreatePipelineLayout(device_, &pipeline_layout_info, nullptr,
+                             &terrain_graphics_pipeline_layout_) !=
+      VK_SUCCESS) {
+    throw std::runtime_error("failed to create pipeline layout!");
+  }
+
+  VkGraphicsPipelineCreateInfo pipeline_create_info{
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .stageCount = beyond::size(shader_stages),
+      .pStages = beyond::to_pointer(shader_stages),
+      .pVertexInputState = &vertex_input_info,
+      .pInputAssemblyState = &input_assembly,
+      .pViewportState = &viewport_state,
+      .pRasterizationState = &rasterizer,
+      .pMultisampleState = &multisampling,
+      .pColorBlendState = &color_blending,
+      .layout = terrain_graphics_pipeline_layout_,
+      .renderPass = render_pass_,
+      .subpass = 0,
+      .basePipelineHandle = VK_NULL_HANDLE,
+  };
+
+  VK_CHECK(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1,
+                                     &pipeline_create_info, nullptr,
+                                     &terrain_graphics_pipeline_));
+
+  vkDestroyShaderModule(device_, terrain_vert_shader_module, nullptr);
+  vkDestroyShaderModule(device_, terrain_frag_shader_module, nullptr);
+}
+
 void App::render()
 {
-  static constexpr std::uint64_t time_out = 1e10;
+  static constexpr std::uint64_t time_out = 1e9;
   VK_CHECK(
       vkWaitForFences(device_, 1, &frame_data_.render_fence_, true, time_out));
   VK_CHECK(vkResetFences(device_, 1, &frame_data_.render_fence_));
@@ -310,6 +439,10 @@ void App::render()
 
   vkCmdBeginRenderPass(cmd, &render_pass_begin_info,
                        VK_SUBPASS_CONTENTS_INLINE);
+
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    terrain_graphics_pipeline_);
+  vkCmdDraw(cmd, 3, 1, 0, 0);
 
   vkCmdEndRenderPass(cmd);
   vkEndCommandBuffer(cmd);
