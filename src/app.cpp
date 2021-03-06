@@ -43,16 +43,28 @@ App::App()
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  window_ = glfwCreateWindow(1400, 900, "Voxel Game", nullptr, nullptr);
+  static constexpr int window_width = 1400;
+  static constexpr int window_height = 900;
+  window_ = glfwCreateWindow(window_width, window_height, "Voxel Game", nullptr,
+                             nullptr);
   if (!window_) { std::exit(1); }
+  window_extent_ = VkExtent2D{static_cast<std::uint32_t>(window_width),
+                              static_cast<std::uint32_t>(window_height)};
+
   glfwMakeContextCurrent(window_);
 
   init_vk_device();
+  init_swapchain();
 }
 
 App::~App()
 {
   if (!device_) { return; }
+
+  for (auto& image_view : swapchain_image_views_) {
+    vkDestroyImageView(device_, image_view, nullptr);
+  }
+  vkDestroySwapchainKHR(device_, swapchain_, nullptr);
 
   vkDestroyDevice(device_, nullptr);
   vkDestroySurfaceKHR(instance_, surface_, nullptr);
@@ -102,4 +114,21 @@ void App::init_vk_device()
     std::exit(-1);
   }
   device_ = device_ret->device;
+}
+
+void App::init_swapchain()
+{
+  vkb::SwapchainBuilder swapchain_builder{physical_device_, device_, surface_};
+
+  vkb::Swapchain vkb_swapchain =
+      swapchain_builder.use_default_format_selection()
+          .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+          .set_desired_extent(window_extent_.width, window_extent_.height)
+          .build()
+          .value();
+
+  swapchain_ = vkb_swapchain.swapchain;
+  swapchain_images_ = vkb_swapchain.get_images().value();
+  swapchain_image_views_ = vkb_swapchain.get_image_views().value();
+  swapchain_image_format_ = vkb_swapchain.image_format;
 }

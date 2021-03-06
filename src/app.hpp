@@ -5,8 +5,12 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+#include <vector>
+
 class App {
   GLFWwindow* window_ = nullptr;
+  VkExtent2D window_extent_{};
+
   VkInstance instance_{};
   VkDebugUtilsMessengerEXT debug_messenger_{};
   VkSurfaceKHR surface_{};
@@ -14,6 +18,11 @@ class App {
   VkDevice device_{};
   VkQueue graphics_queue_{};
   VkQueue present_queue_{};
+
+  VkSwapchainKHR swapchain_{};
+  std::vector<VkImage> swapchain_images_{};
+  std::vector<VkImageView> swapchain_image_views_{};
+  VkFormat swapchain_image_format_{};
 
 public:
   App();
@@ -28,6 +37,7 @@ public:
 
 private:
   void init_vk_device();
+  void init_swapchain();
 };
 
 #endif // VOXEL_GAME_APP_HPP
