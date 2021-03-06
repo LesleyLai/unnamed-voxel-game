@@ -28,6 +28,8 @@ class App {
   VkCommandPool command_pool_{};
   VkCommandBuffer main_command_buffer_{};
 
+  VkRenderPass render_pass_{};
+
 public:
   App();
   ~App();
@@ -43,6 +45,7 @@ private:
   void init_vk_device();
   void init_swapchain();
   void init_command();
+  void init_render_pass();
 };
 
 #endif // VOXEL_GAME_APP_HPP

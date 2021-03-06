@@ -56,12 +56,14 @@ App::App()
   init_vk_device();
   init_swapchain();
   init_command();
+  init_render_pass();
 }
 
 App::~App()
 {
   if (!device_) { return; }
 
+  vkDestroyRenderPass(device_, render_pass_, nullptr);
   vkDestroyCommandPool(device_, command_pool_, nullptr);
 
   for (auto& image_view : swapchain_image_views_) {
@@ -163,4 +165,51 @@ void App::init_command()
   };
   VK_CHECK(vkAllocateCommandBuffers(device_, &command_buffer_allocate_info,
                                     &main_command_buffer_));
+}
+void App::init_render_pass()
+{
+  // the renderpass will use this color attachment.
+  const VkAttachmentDescription color_attachment = {
+      .flags = 0,
+      .format = swapchain_image_format_,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+  };
+
+  static constexpr VkAttachmentReference color_attachment_ref = {
+      .attachment = 0,
+      .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  };
+
+  static constexpr VkSubpassDescription subpass = {
+      .flags = 0,
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .inputAttachmentCount = 0,
+      .pInputAttachments = nullptr,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &color_attachment_ref,
+      .pResolveAttachments = nullptr,
+      .pDepthStencilAttachment = nullptr,
+      .preserveAttachmentCount = 0,
+      .pPreserveAttachments = nullptr};
+
+  const VkRenderPassCreateInfo render_pass_create_info = {
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .attachmentCount = 1,
+      .pAttachments = &color_attachment,
+      .subpassCount = 1,
+      .pSubpasses = &subpass,
+      .dependencyCount = 0,
+      .pDependencies = nullptr,
+  };
+
+  VK_CHECK(vkCreateRenderPass(device_, &render_pass_create_info, nullptr,
+                              &render_pass_));
 }
