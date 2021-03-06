@@ -16,13 +16,14 @@ add_library(common
         app.cpp
         vulkan_helpers/shader_module.hpp
         vulkan_helpers/shader_module.cpp
-        )
+        vulkan_helpers/vma_impl.cpp)
 target_link_libraries(common
         PUBLIC
         CONAN_PKG::fmt
         CONAN_PKG::glfw
         beyond::core
         Vulkan::Vulkan
+        third_party::vma
         PRIVATE
         compiler_options
         vk-bootstrap::vk-bootstrap)

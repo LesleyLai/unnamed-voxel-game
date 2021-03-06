@@ -63,6 +63,7 @@ App::App()
   init_framebuffer();
   init_sync_strucures();
   init_pipeline();
+  load_mesh();
 }
 
 App::~App()
@@ -70,6 +71,9 @@ App::~App()
   if (!device_) { return; }
 
   vkDeviceWaitIdle(device_);
+
+  vmaDestroyBuffer(allocator_, terrain_mesh_.vertex_buffer_.buffer_,
+                   terrain_mesh_.vertex_buffer_.allocation_);
 
   vkDestroyPipeline(device_, terrain_graphics_pipeline_, nullptr);
   vkDestroyPipelineLayout(device_, terrain_graphics_pipeline_layout_, nullptr);
@@ -88,6 +92,8 @@ App::~App()
     vkDestroyImageView(device_, image_view, nullptr);
   }
   vkDestroySwapchainKHR(device_, swapchain_, nullptr);
+
+  vmaDestroyAllocator(allocator_);
 
   vkDestroyDevice(device_, nullptr);
   vkDestroySurfaceKHR(instance_, surface_, nullptr);
@@ -146,6 +152,13 @@ void App::init_vk_device()
   graphics_queue_family_index_ =
       vkb_device.get_queue_index(vkb::QueueType::graphics).value();
   present_queue_ = vkb_device.get_queue(vkb::QueueType::present).value();
+
+  const VmaAllocatorCreateInfo allocator_create_info{
+      .physicalDevice = physical_device_,
+      .device = device_,
+      .instance = instance_,
+  };
+  VK_CHECK(vmaCreateAllocator(&allocator_create_info, &allocator_));
 }
 
 void App::init_swapchain()
@@ -302,11 +315,18 @@ void App::init_pipeline()
        .module = terrain_frag_shader_module,
        .pName = "main"}};
 
+  static constexpr auto vertex_binding_description =
+      Vertex::binding_description();
+  static constexpr auto vertex_attribute_descriptions =
+      Vertex::attributes_descriptions();
+
   static constexpr VkPipelineVertexInputStateCreateInfo vertex_input_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = 0,
-      .vertexAttributeDescriptionCount = 0,
-  };
+      .vertexBindingDescriptionCount = 1,
+      .pVertexBindingDescriptions = &vertex_binding_description,
+      .vertexAttributeDescriptionCount =
+          static_cast<std::uint32_t>(vertex_attribute_descriptions.size()),
+      .pVertexAttributeDescriptions = vertex_attribute_descriptions.data()};
 
   static constexpr VkPipelineInputAssemblyStateCreateInfo input_assembly{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -442,7 +462,11 @@ void App::render()
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     terrain_graphics_pipeline_);
-  vkCmdDraw(cmd, 3, 1, 0, 0);
+  VkDeviceSize vertex_offset = 0;
+  vkCmdBindVertexBuffers(cmd, 0, 1, &terrain_mesh_.vertex_buffer_.buffer_,
+                         &vertex_offset);
+  vkCmdDraw(cmd, static_cast<std::uint32_t>(terrain_mesh_.vertices_.size()), 1,
+            0, 0);
 
   vkCmdEndRenderPass(cmd);
   vkEndCommandBuffer(cmd);
@@ -477,4 +501,42 @@ void App::render()
   VK_CHECK(vkQueuePresentKHR(present_queue_, &present_info));
 
   ++frame_number_;
+}
+
+void App::load_mesh()
+{
+  terrain_mesh_.vertices_.resize(3);
+
+  terrain_mesh_.vertices_[0].position = {1.f, 1.f, 0.0f};
+  terrain_mesh_.vertices_[1].position = {-1.f, 1.f, 0.0f};
+  terrain_mesh_.vertices_[2].position = {0.f, -1.f, 0.0f};
+
+  terrain_mesh_.vertices_[0].color = {1.f, 0.f, 0.0f};
+  terrain_mesh_.vertices_[1].color = {0.f, 1.f, 0.0f};
+  terrain_mesh_.vertices_[2].color = {0.f, 1.f, 1.0f};
+
+  upload_mesh(terrain_mesh_);
+}
+void App::upload_mesh(Mesh& mesh)
+{
+  // allocate vertex buffer
+  const VkBufferCreateInfo buffer_create_info = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = mesh.vertices_.size() * sizeof(Vertex),
+      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+  };
+
+  const VmaAllocationCreateInfo vma_alloc_info{.usage =
+                                                   VMA_MEMORY_USAGE_CPU_TO_GPU};
+
+  // allocate the buffer
+  VK_CHECK(vmaCreateBuffer(allocator_, &buffer_create_info, &vma_alloc_info,
+                           &mesh.vertex_buffer_.buffer_,
+                           &mesh.vertex_buffer_.allocation_, nullptr));
+
+  void* data = nullptr;
+  vmaMapMemory(allocator_, mesh.vertex_buffer_.allocation_, &data);
+  std::memcpy(data, terrain_mesh_.vertices_.data(),
+              terrain_mesh_.vertices_.size() * sizeof(Vertex));
+  vmaUnmapMemory(allocator_, mesh.vertex_buffer_.allocation_);
 }

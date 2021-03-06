@@ -4,3 +4,6 @@
 [submodule "third-party/beyond-core"]
 	path = third-party/beyond-core
 	url = https://github.com/Beyond-Engine/Core.git
+[submodule "third-party/VulkanMemoryAllocator"]
+	path = third-party/VulkanMemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
