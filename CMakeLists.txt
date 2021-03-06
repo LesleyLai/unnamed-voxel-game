@@ -12,7 +12,9 @@ include("cmake/StaticAnalyzers.cmake")
 include("cmake/conan.cmake")
 run_conan()
 
+add_subdirectory(third-party)
 add_subdirectory(src)
+
 
 #if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 #    include(CTest)
