@@ -5,7 +5,14 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+#include <cstdint>
 #include <vector>
+
+struct FrameData {
+  VkSemaphore render_semaphore_{};
+  VkSemaphore present_semaphore_{};
+  VkFence render_fence_{};
+};
 
 class App {
   GLFWwindow* window_ = nullptr;
@@ -29,6 +36,10 @@ class App {
   VkCommandBuffer main_command_buffer_{};
 
   VkRenderPass render_pass_{};
+  std::vector<VkFramebuffer> framebuffers_{};
+
+  std::uint32_t frame_number_ = 0;
+  FrameData frame_data_{};
 
 public:
   App();
@@ -46,6 +57,10 @@ private:
   void init_swapchain();
   void init_command();
   void init_render_pass();
+  void init_framebuffer();
+  void init_sync_strucures();
+
+  void render();
 };
 
 #endif // VOXEL_GAME_APP_HPP

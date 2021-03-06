@@ -9,10 +9,7 @@
 #define VK_CHECK(x)                                                            \
   do {                                                                         \
     VkResult err = x;                                                          \
-    if (err) {                                                                 \
-      fmt::print("Vulkan error: {}\n", err);                                   \
-      exit(-1);                                                                \
-    }                                                                          \
+    if (err) { fmt::print("Vulkan error: {}\n", err); }                        \
   } while (0)
 
 namespace {
@@ -57,15 +54,26 @@ App::App()
   init_swapchain();
   init_command();
   init_render_pass();
+  init_framebuffer();
+  init_sync_strucures();
 }
 
 App::~App()
 {
   if (!device_) { return; }
 
+  vkDeviceWaitIdle(device_);
+
+  vkDestroyFence(device_, frame_data_.render_fence_, nullptr);
+  vkDestroySemaphore(device_, frame_data_.render_semaphore_, nullptr);
+  vkDestroySemaphore(device_, frame_data_.present_semaphore_, nullptr);
+
   vkDestroyRenderPass(device_, render_pass_, nullptr);
   vkDestroyCommandPool(device_, command_pool_, nullptr);
 
+  for (auto& framebuffer : framebuffers_) {
+    vkDestroyFramebuffer(device_, framebuffer, nullptr);
+  }
   for (auto& image_view : swapchain_image_views_) {
     vkDestroyImageView(device_, image_view, nullptr);
   }
@@ -83,6 +91,8 @@ App::~App()
 void App::exec()
 {
   while (!glfwWindowShouldClose(window_)) {
+    render();
+
     glfwSwapBuffers(window_);
     glfwPollEvents();
   }
@@ -212,4 +222,126 @@ void App::init_render_pass()
 
   VK_CHECK(vkCreateRenderPass(device_, &render_pass_create_info, nullptr,
                               &render_pass_));
+}
+
+void App::init_framebuffer()
+{
+  // create the framebuffers for the swapchain images. This will connect the
+  // render-pass to the images for rendering
+  VkFramebufferCreateInfo framebuffer_create_info = {
+      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+      .pNext = nullptr,
+      .renderPass = render_pass_,
+      .attachmentCount = 1,
+      .width = window_extent_.width,
+      .height = window_extent_.height,
+      .layers = 1,
+  };
+
+  // grab how many images we have in the swapchain
+  const auto swapchain_imagecount =
+      static_cast<std::uint32_t>(swapchain_images_.size());
+  framebuffers_ = std::vector<VkFramebuffer>(swapchain_imagecount);
+
+  // create framebuffers for each of the swapchain image views
+  for (std::uint32_t i = 0; i < swapchain_imagecount; ++i) {
+    framebuffer_create_info.pAttachments = &swapchain_image_views_[i];
+    VK_CHECK(vkCreateFramebuffer(device_, &framebuffer_create_info, nullptr,
+                                 &framebuffers_[i]));
+  }
+}
+
+void App::init_sync_strucures()
+{
+  const VkSemaphoreCreateInfo semaphore_create_info{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+  };
+  VK_CHECK(vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
+                             &frame_data_.render_semaphore_));
+  VK_CHECK(vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
+                             &frame_data_.present_semaphore_));
+
+  const VkFenceCreateInfo fence_create_info{
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+  };
+  VK_CHECK(vkCreateFence(device_, &fence_create_info, nullptr,
+                         &frame_data_.render_fence_));
+}
+
+void App::render()
+{
+  static constexpr std::uint64_t time_out = 1e10;
+  VK_CHECK(
+      vkWaitForFences(device_, 1, &frame_data_.render_fence_, true, time_out));
+  VK_CHECK(vkResetFences(device_, 1, &frame_data_.render_fence_));
+
+  uint32_t swapchain_image_index = 0;
+  VK_CHECK(vkAcquireNextImageKHR(device_, swapchain_, time_out,
+                                 frame_data_.present_semaphore_, nullptr,
+                                 &swapchain_image_index));
+  VK_CHECK(vkResetCommandBuffer(main_command_buffer_, 0));
+
+  VkCommandBuffer cmd = main_command_buffer_;
+  static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .pNext = nullptr,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+      .pInheritanceInfo = nullptr,
+  };
+  VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
+
+  const float flash =
+      std::abs(std::sin(static_cast<float>(frame_number_) / 120.f));
+  const VkClearValue clear_value = {.color = {{0.0f, 0.0f, flash, 1.0f}}};
+
+  const VkRenderPassBeginInfo render_pass_begin_info = {
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+      .pNext = nullptr,
+      .renderPass = render_pass_,
+      .framebuffer = framebuffers_[swapchain_image_index],
+      .renderArea = {.offset = {.x = 0, .y = 0}, .extent = window_extent_},
+      .clearValueCount = 1,
+      .pClearValues = &clear_value,
+  };
+
+  vkCmdBeginRenderPass(cmd, &render_pass_begin_info,
+                       VK_SUBPASS_CONTENTS_INLINE);
+
+  vkCmdEndRenderPass(cmd);
+  vkEndCommandBuffer(cmd);
+
+  static constexpr VkPipelineStageFlags wait_stage =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+  const VkSubmitInfo submit_info{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .pNext = nullptr,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &frame_data_.present_semaphore_,
+      .pWaitDstStageMask = &wait_stage,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &main_command_buffer_,
+      .signalSemaphoreCount = 1,
+      .pSignalSemaphores = &frame_data_.render_semaphore_,
+  };
+  VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit_info,
+                         frame_data_.render_fence_));
+
+  const VkPresentInfoKHR present_info = {
+      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .pNext = nullptr,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &frame_data_.render_semaphore_,
+      .swapchainCount = 1,
+      .pSwapchains = &swapchain_,
+      .pImageIndices = &swapchain_image_index,
+  };
+
+  VK_CHECK(vkQueuePresentKHR(present_queue_, &present_info));
+
+  ++frame_number_;
 }
