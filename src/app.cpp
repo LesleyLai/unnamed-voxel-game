@@ -72,6 +72,8 @@ App::~App()
 
   vkDeviceWaitIdle(device_);
 
+  vmaDestroyBuffer(allocator_, terrain_mesh_.index_buffer_.buffer_,
+                   terrain_mesh_.index_buffer_.allocation_);
   vmaDestroyBuffer(allocator_, terrain_mesh_.vertex_buffer_.buffer_,
                    terrain_mesh_.vertex_buffer_.allocation_);
 
@@ -462,11 +464,14 @@ void App::render()
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     terrain_graphics_pipeline_);
-  VkDeviceSize vertex_offset = 0;
+  const VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &terrain_mesh_.vertex_buffer_.buffer_,
-                         &vertex_offset);
-  vkCmdDraw(cmd, static_cast<std::uint32_t>(terrain_mesh_.vertices_.size()), 1,
-            0, 0);
+                         &offset);
+  vkCmdBindIndexBuffer(cmd, terrain_mesh_.index_buffer_.buffer_, offset,
+                       VK_INDEX_TYPE_UINT32);
+  vkCmdDrawIndexed(cmd,
+                   static_cast<std::uint32_t>(terrain_mesh_.indices_.size()), 1,
+                   0, 0, 0);
 
   vkCmdEndRenderPass(cmd);
   vkEndCommandBuffer(cmd);
@@ -515,28 +520,53 @@ void App::load_mesh()
   terrain_mesh_.vertices_[1].color = {0.f, 1.f, 0.0f};
   terrain_mesh_.vertices_[2].color = {0.f, 1.f, 1.0f};
 
+  terrain_mesh_.indices_ = {0, 1, 2};
+
   upload_mesh(terrain_mesh_);
 }
 void App::upload_mesh(Mesh& mesh)
 {
-  // allocate vertex buffer
-  const VkBufferCreateInfo buffer_create_info = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = mesh.vertices_.size() * sizeof(Vertex),
-      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-  };
+  // vertex buffer
+  {
+    const VkBufferCreateInfo buffer_create_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = mesh.vertices_.size() * sizeof(Vertex),
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    };
 
-  const VmaAllocationCreateInfo vma_alloc_info{.usage =
-                                                   VMA_MEMORY_USAGE_CPU_TO_GPU};
+    const VmaAllocationCreateInfo vma_alloc_info{
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU};
 
-  // allocate the buffer
-  VK_CHECK(vmaCreateBuffer(allocator_, &buffer_create_info, &vma_alloc_info,
-                           &mesh.vertex_buffer_.buffer_,
-                           &mesh.vertex_buffer_.allocation_, nullptr));
+    VK_CHECK(vmaCreateBuffer(allocator_, &buffer_create_info, &vma_alloc_info,
+                             &mesh.vertex_buffer_.buffer_,
+                             &mesh.vertex_buffer_.allocation_, nullptr));
 
-  void* data = nullptr;
-  vmaMapMemory(allocator_, mesh.vertex_buffer_.allocation_, &data);
-  std::memcpy(data, terrain_mesh_.vertices_.data(),
-              terrain_mesh_.vertices_.size() * sizeof(Vertex));
-  vmaUnmapMemory(allocator_, mesh.vertex_buffer_.allocation_);
+    void* data = nullptr;
+    vmaMapMemory(allocator_, mesh.vertex_buffer_.allocation_, &data);
+    std::memcpy(data, terrain_mesh_.vertices_.data(),
+                terrain_mesh_.vertices_.size() * sizeof(Vertex));
+    vmaUnmapMemory(allocator_, mesh.vertex_buffer_.allocation_);
+  }
+
+  // index buffer
+  {
+    const VkBufferCreateInfo buffer_create_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = mesh.indices_.size() * sizeof(std::uint32_t),
+        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+    };
+
+    const VmaAllocationCreateInfo vma_alloc_info{
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU};
+
+    VK_CHECK(vmaCreateBuffer(allocator_, &buffer_create_info, &vma_alloc_info,
+                             &mesh.index_buffer_.buffer_,
+                             &mesh.index_buffer_.allocation_, nullptr));
+
+    void* data = nullptr;
+    vmaMapMemory(allocator_, mesh.index_buffer_.allocation_, &data);
+    std::memcpy(data, terrain_mesh_.indices_.data(),
+                terrain_mesh_.indices_.size() * sizeof(std::uint32_t));
+    vmaUnmapMemory(allocator_, mesh.index_buffer_.allocation_);
+  }
 }
