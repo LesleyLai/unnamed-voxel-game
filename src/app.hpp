@@ -11,27 +11,43 @@
 #include <cstdint>
 #include <vector>
 
+#include <beyond/math/matrix.hpp>
 #include <beyond/math/point.hpp>
 #include <beyond/math/vector.hpp>
 
-struct FrameData {
-  VkSemaphore render_semaphore_{};
-  VkSemaphore present_semaphore_{};
-  VkFence render_fence_{};
+struct GPUCameraData {
+  beyond::Mat4 view;
+  beyond::Mat4 proj;
+  beyond::Mat4 viewproj;
+};
 
-  VkCommandPool command_pool_{};
-  VkCommandBuffer main_command_buffer_{};
+struct AllocatedBuffer {
+  VkBuffer buffer{};
+  VmaAllocation allocation{};
+};
+
+struct FrameData {
+  VkSemaphore render_semaphore{};
+  VkSemaphore present_semaphore{};
+  VkFence render_fence{};
+
+  VkCommandPool command_pool{};
+  VkCommandBuffer main_command_buffer{};
+
+  AllocatedBuffer camera_buffer{};
+  VkDescriptorSet global_descriptor{};
 };
 constexpr std::uint32_t frames_in_flight = 2;
 
-struct AllocatedBuffer {
-  VkBuffer buffer_{};
-  VmaAllocation allocation_{};
+struct BufferCreateInfo {
+  size_t size = 0;
+  VkBufferUsageFlags usage = 0;
+  VmaMemoryUsage memory_usage = VMA_MEMORY_USAGE_UNKNOWN;
 };
 
 struct AllocatedImage {
-  VkImage image_{};
-  VmaAllocation allocation_{};
+  VkImage image{};
+  VmaAllocation allocation{};
 };
 
 struct Vertex {
@@ -99,6 +115,9 @@ class App {
   VkRenderPass render_pass_{};
   std::vector<VkFramebuffer> framebuffers_{};
 
+  VkDescriptorSetLayout global_descriptor_set_layout_{};
+  VkDescriptorPool descriptor_pool_{};
+
   std::uint32_t frame_number_ = 0;
   FrameData frame_data_[frames_in_flight]{};
 
@@ -125,9 +144,17 @@ private:
   void init_render_pass();
   void init_framebuffer();
   void init_sync_strucures();
+  void init_descriptors();
   void init_pipeline();
 
   [[nodiscard]] auto get_current_frame() -> FrameData&;
+
+  [[nodiscard]] auto create_buffer(const BufferCreateInfo& buffer_create_info)
+      -> AllocatedBuffer;
+
+  [[nodiscard]] auto
+  create_buffer_from_data(const BufferCreateInfo& buffer_create_info,
+                          void* data) -> AllocatedBuffer;
 
   void render();
   void load_mesh();
