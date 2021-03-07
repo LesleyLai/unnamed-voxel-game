@@ -771,10 +771,10 @@ void App::render()
 
 void App::load_mesh()
 {
-  const auto terrain = generate_terrain();
+  const auto terrain = generate_chunk();
   for (const auto& pos : terrain) {
-    terrain_mesh_.vertices_.push_back(Vertex{
-        .position = pos, .normal = {0.f, 0.f, 1.f}, .color = {1.f, 0.f, 0.f}});
+    terrain_mesh_.vertices_.push_back(
+        Vertex{.position = pos, .normal = {0.f, 0.f, 1.f}, .color = pos});
   }
 
   upload_mesh(terrain_mesh_);

@@ -38,6 +38,6 @@ struct Vertex {
   }
 };
 
-[[nodiscard]] auto generate_terrain() -> std::vector<beyond::Point3>;
+[[nodiscard]] auto generate_chunk() -> std::vector<beyond::Point3>;
 
 #endif // VOXEL_GAME_MARCHING_CUBES_HPP

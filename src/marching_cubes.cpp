@@ -316,7 +316,8 @@ beyond::Point3 VertexInterp(float isolevel, beyond::Point3& p1,
         0 will be returned if the grid cell is either totally above
    of totally below the isolevel.
 */
-std::vector<Triangle> polygonise(GridCell grid, float isolevel)
+void polygonise(GridCell grid, float isolevel,
+                std::vector<beyond::Point3>& positions)
 {
   int cubeindex;
   beyond::Point3 vertlist[12];
@@ -336,7 +337,7 @@ std::vector<Triangle> polygonise(GridCell grid, float isolevel)
   if (grid.val[7] < isolevel) cubeindex |= 128;
 
   /* Cube is entirely in/out of the surface */
-  if (edge_table[cubeindex] == 0) return {};
+  if (edge_table[cubeindex] == 0) return;
 
   /* Find the vertices where the surface intersects the cube */
   if (edge_table[cubeindex] & 1)
@@ -384,29 +385,56 @@ std::vector<Triangle> polygonise(GridCell grid, float isolevel)
                                vertlist[tri_table[cubeindex][i + 2]]}});
   }
 
-  return triangles;
+  for (const auto& triangle : triangles) {
+    positions.push_back(triangle.p[0]);
+    positions.push_back(triangle.p[1]);
+    positions.push_back(triangle.p[2]);
+  }
 }
 
-[[nodiscard]] auto generate_terrain() -> std::vector<beyond::Point3>
+[[nodiscard]] auto noise(beyond::Point3 p) -> float
 {
-  constexpr beyond::Point3 corners[] = {{0, 0, 0}, {0, 0, 1}, {0, 1, 0},
-                                        {0, 1, 1}, {1, 0, 0}, {1, 0, 1},
-                                        {1, 1, 0}, {1, 1, 1}};
+  return (std::sin(p.x) + std::cos(p.y) + std::sin(p.z)) / 3;
+}
 
-  GridCell cell;
-  for (int i = 0; i < 8; ++i) {
-    cell.p[i] = corners[i];
-    cell.val[i] = std::sin(static_cast<float>(i));
+float corner_offset(float center_offset, int corner_index)
+{
+  return center_offset + 0.5f - static_cast<float>(corner_index);
+}
+
+[[nodiscard]] auto generate_chunk() -> std::vector<beyond::Point3>
+{
+  std::vector<beyond::Point3> positions;
+
+  constexpr auto chunk_voxel_count = 16;
+  constexpr auto half_chunk_voxel_count = chunk_voxel_count / 2;
+
+  for (int z = 0; z < chunk_voxel_count; ++z) {
+    const float fz = static_cast<float>(z - half_chunk_voxel_count);
+    for (int y = 0; y < chunk_voxel_count; ++y) {
+      const float fy = static_cast<float>(y - half_chunk_voxel_count);
+      for (int x = 0; x < chunk_voxel_count; ++x) {
+        const float fx = static_cast<float>(x - half_chunk_voxel_count);
+        const beyond::Point3 voxel_center = beyond::Vec3{fx, fy, fz} / 4.f;
+
+        GridCell cell;
+        for (int cz = 0; cz < 2; ++cz) {
+          const float cfz = corner_offset(voxel_center.z, cz);
+          for (int cy = 0; cy < 2; ++cy) {
+            const float cfy = corner_offset(voxel_center.y, cy);
+            for (int cx = 0; cx < 2; ++cx) {
+              const float cfx = corner_offset(voxel_center.x, cx);
+
+              const int corner_index = cz * 4 + cy * 2 + cx;
+              cell.p[corner_index] = beyond::Point3{cfx, cfy, cfz};
+              cell.val[corner_index] = noise(cell.p[corner_index]);
+            }
+          }
+        }
+
+        polygonise(cell, 0, positions);
+      }
+    }
   }
-
-  auto triangles = polygonise(cell, 0);
-
-  std::vector<beyond::Point3> results;
-  results.reserve(triangles.size() * 3);
-  for (const auto& triangle : triangles) {
-    results.push_back(triangle.p[0]);
-    results.push_back(triangle.p[1]);
-    results.push_back(triangle.p[2]);
-  }
-  return results;
+  return positions;
 }
