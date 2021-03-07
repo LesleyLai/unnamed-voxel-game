@@ -17,7 +17,10 @@ add_library(common
         vulkan_helpers/shader_module.hpp
         vulkan_helpers/shader_module.cpp
         vulkan_helpers/vma_impl.cpp
-        first_person_camera.hpp)
+        first_person_camera.hpp
+        marching_cubes.hpp
+        marching_cubes.cpp
+        )
 target_link_libraries(common
         PUBLIC
         CONAN_PKG::fmt
@@ -33,7 +36,7 @@ target_include_directories(common PUBLIC "${CMAKE_SOURCE_DIR}/include")
 add_dependencies(common vertShader)
 add_dependencies(common fragShader)
 
-add_executable(app "main.cpp")
+add_executable(app "main.cpp" marching_cubes.cpp marching_cubes.hpp mesh.hpp)
 target_link_libraries(app
         PRIVATE common compiler_options)
 add_clangformat(app)

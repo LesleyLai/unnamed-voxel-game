@@ -126,8 +126,8 @@ App::~App()
 
   vkDeviceWaitIdle(device_);
 
-  vmaDestroyBuffer(allocator_, terrain_mesh_.index_buffer_.buffer,
-                   terrain_mesh_.index_buffer_.allocation);
+  //  vmaDestroyBuffer(allocator_, terrain_mesh_.index_buffer_.buffer,
+  //                   terrain_mesh_.index_buffer_.allocation);
   vmaDestroyBuffer(allocator_, terrain_mesh_.vertex_buffer_.buffer,
                    terrain_mesh_.vertex_buffer_.allocation);
 
@@ -736,14 +736,13 @@ void App::render()
   const VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &terrain_mesh_.vertex_buffer_.buffer,
                          &offset);
-  vkCmdBindIndexBuffer(cmd, terrain_mesh_.index_buffer_.buffer, offset,
-                       VK_INDEX_TYPE_UINT32);
+  //  vkCmdBindIndexBuffer(cmd, terrain_mesh_.index_buffer_.buffer, offset,
+  //                       VK_INDEX_TYPE_UINT32);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           terrain_graphics_pipeline_layout_, 0, 1,
                           &current_frame_data.global_descriptor, 0, nullptr);
-  vkCmdDrawIndexed(cmd,
-                   static_cast<std::uint32_t>(terrain_mesh_.indices_.size()), 1,
-                   0, 0, 0);
+  vkCmdDraw(cmd, static_cast<std::uint32_t>(terrain_mesh_.vertices_.size()), 1,
+            0, 0);
 
   vkCmdEndRenderPass(cmd);
   vkEndCommandBuffer(cmd);
@@ -782,17 +781,11 @@ void App::render()
 
 void App::load_mesh()
 {
-  terrain_mesh_.vertices_.resize(3);
-
-  terrain_mesh_.vertices_[0].position = {1.f, 1.f, 0.0f};
-  terrain_mesh_.vertices_[1].position = {-1.f, 1.f, 0.0f};
-  terrain_mesh_.vertices_[2].position = {0.f, -1.f, 0.0f};
-
-  terrain_mesh_.vertices_[0].color = {1.f, 0.f, 0.0f};
-  terrain_mesh_.vertices_[1].color = {0.f, 1.f, 0.0f};
-  terrain_mesh_.vertices_[2].color = {0.f, 1.f, 1.0f};
-
-  terrain_mesh_.indices_ = {0, 1, 2};
+  const auto terrain = generate_terrain();
+  for (const auto& pos : terrain) {
+    terrain_mesh_.vertices_.push_back(Vertex{
+        .position = pos, .normal = {0.f, 0.f, 1.f}, .color = {1.f, 0.f, 0.f}});
+  }
 
   upload_mesh(terrain_mesh_);
 }
@@ -807,13 +800,13 @@ void App::upload_mesh(Mesh& mesh)
       },
       mesh.vertices_.data());
 
-  mesh.index_buffer_ = create_buffer_from_data(
-      BufferCreateInfo{
-          .size = beyond::byte_size(mesh.indices_),
-          .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-      },
-      mesh.indices_.data());
+  //  mesh.index_buffer_ = create_buffer_from_data(
+  //      BufferCreateInfo{
+  //          .size = beyond::byte_size(mesh.indices_),
+  //          .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+  //          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  //      },
+  //      mesh.indices_.data());
 }
 
 auto App::get_current_frame() -> FrameData&

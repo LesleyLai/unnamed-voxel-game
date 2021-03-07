@@ -16,6 +16,7 @@
 #include <beyond/math/vector.hpp>
 
 #include "first_person_camera.hpp"
+#include "marching_cubes.hpp"
 
 struct GPUCameraData {
   beyond::Mat4 view;
@@ -52,37 +53,6 @@ struct AllocatedImage {
   VmaAllocation allocation{};
 };
 
-struct Vertex {
-  beyond::Point3 position;
-  beyond::Vec3 normal;
-  beyond::Vec3 color;
-
-  [[nodiscard]] static constexpr auto binding_description()
-  {
-    return VkVertexInputBindingDescription{
-        .binding = 0,
-        .stride = sizeof(Vertex),
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-    };
-  }
-
-  [[nodiscard]] static constexpr auto attributes_descriptions()
-  {
-    return std::to_array<VkVertexInputAttributeDescription>(
-        {{.location = 0,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, position)},
-         {.location = 1,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, position)},
-         {.location = 2,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, position)}});
-  }
-};
 
 struct Mesh {
   std::vector<Vertex> vertices_;

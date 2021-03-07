@@ -1,0 +1,4 @@
+#ifndef VOXEL_GAME_MESH_HPP
+#define VOXEL_GAME_MESH_HPP
+
+#endif // VOXEL_GAME_MESH_HPP
