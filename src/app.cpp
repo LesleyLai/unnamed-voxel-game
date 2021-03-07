@@ -580,7 +580,7 @@ void App::init_pipeline()
       .depthClampEnable = VK_FALSE,
       .rasterizerDiscardEnable = VK_FALSE,
       .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_NONE,
+      .cullMode = VK_CULL_MODE_BACK_BIT,
       .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
       .depthBiasEnable = VK_FALSE,
       .lineWidth = 1.0f,
@@ -771,12 +771,7 @@ void App::render()
 
 void App::load_mesh()
 {
-  const auto terrain = generate_chunk();
-  for (const auto& pos : terrain) {
-    terrain_mesh_.vertices_.push_back(
-        Vertex{.position = pos, .normal = {0.f, 0.f, 1.f}, .color = pos});
-  }
-
+  terrain_mesh_.vertices_ = generate_chunk_mesh();
   upload_mesh(terrain_mesh_);
 }
 

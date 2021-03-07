@@ -316,8 +316,7 @@ beyond::Point3 VertexInterp(float isolevel, beyond::Point3& p1,
         0 will be returned if the grid cell is either totally above
    of totally below the isolevel.
 */
-void polygonise(GridCell grid, float isolevel,
-                std::vector<beyond::Point3>& positions)
+void polygonise(GridCell grid, float isolevel, std::vector<Vertex>& positions)
 {
   int cubeindex;
   beyond::Point3 vertlist[12];
@@ -386,9 +385,18 @@ void polygonise(GridCell grid, float isolevel,
   }
 
   for (const auto& triangle : triangles) {
-    positions.push_back(triangle.p[0]);
-    positions.push_back(triangle.p[1]);
-    positions.push_back(triangle.p[2]);
+    const auto p0 = triangle.p[0];
+    const auto p1 = triangle.p[1];
+    const auto p2 = triangle.p[2];
+
+    const auto edge0 = p1 - p0;
+    const auto edge1 = p2 - p1;
+
+    const auto normal = beyond::normalize(beyond::cross(edge0, edge1));
+
+    positions.push_back(Vertex{.position = p0, .normal = normal});
+    positions.push_back(Vertex{.position = p1, .normal = normal});
+    positions.push_back(Vertex{.position = p2, .normal = normal});
   }
 }
 
@@ -402,9 +410,9 @@ float corner_offset(float center_offset, int corner_index)
   return center_offset + 0.5f - static_cast<float>(corner_index);
 }
 
-[[nodiscard]] auto generate_chunk() -> std::vector<beyond::Point3>
+[[nodiscard]] auto generate_chunk_mesh() -> std::vector<Vertex>
 {
-  std::vector<beyond::Point3> positions;
+  std::vector<Vertex> vertices;
 
   constexpr auto chunk_voxel_count = 16;
   constexpr auto half_chunk_voxel_count = chunk_voxel_count / 2;
@@ -432,9 +440,9 @@ float corner_offset(float center_offset, int corner_index)
           }
         }
 
-        polygonise(cell, 0, positions);
+        polygonise(cell, 0, vertices);
       }
     }
   }
-  return positions;
+  return vertices;
 }

@@ -9,7 +9,6 @@
 struct Vertex {
   beyond::Point3 position;
   beyond::Vec3 normal;
-  beyond::Vec3 color;
 
   [[nodiscard]] static constexpr auto binding_description()
   {
@@ -30,14 +29,10 @@ struct Vertex {
          {.location = 1,
           .binding = 0,
           .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, normal)},
-         {.location = 2,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, color)}});
+          .offset = offsetof(Vertex, normal)}});
   }
 };
 
-[[nodiscard]] auto generate_chunk() -> std::vector<beyond::Point3>;
+[[nodiscard]] auto generate_chunk_mesh() -> std::vector<Vertex>;
 
 #endif // VOXEL_GAME_MARCHING_CUBES_HPP
