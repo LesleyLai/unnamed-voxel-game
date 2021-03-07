@@ -15,6 +15,8 @@
 #include <beyond/math/point.hpp>
 #include <beyond/math/vector.hpp>
 
+#include "first_person_camera.hpp"
+
 struct GPUCameraData {
   beyond::Mat4 view;
   beyond::Mat4 proj;
@@ -89,6 +91,8 @@ struct Mesh {
   AllocatedBuffer index_buffer_;
 };
 
+enum class MouseDraggingState { No, Start, Dragging };
+
 class App {
   GLFWwindow* window_ = nullptr;
   VkExtent2D window_extent_{};
@@ -126,6 +130,11 @@ class App {
 
   Mesh terrain_mesh_{};
 
+  FirstPersonCamera camera_{beyond::Vec3(0.0f, 0.0f, 5.0f)};
+  MouseDraggingState dragging_ = MouseDraggingState::No;
+  float last_mouse_x_{};
+  float last_mouse_y_{};
+
 public:
   App();
   ~App();
@@ -136,6 +145,14 @@ public:
   auto operator=(const App&) -> App& = delete;
   App(App&&) noexcept = delete;
   auto operator=(App&&) noexcept -> App& = delete;
+
+  void move_camera(FirstPersonCamera::Movement movement);
+  void mouse_dragging(bool is_dragging);
+  [[nodiscard]] auto dragging_status() const
+  {
+    return dragging_;
+  }
+  void mouse_move(float x, float y);
 
 private:
   void init_vk_device();

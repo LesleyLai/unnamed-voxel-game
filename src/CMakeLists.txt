@@ -16,7 +16,8 @@ add_library(common
         app.cpp
         vulkan_helpers/shader_module.hpp
         vulkan_helpers/shader_module.cpp
-        vulkan_helpers/vma_impl.cpp)
+        vulkan_helpers/vma_impl.cpp
+        first_person_camera.hpp)
 target_link_libraries(common
         PUBLIC
         CONAN_PKG::fmt

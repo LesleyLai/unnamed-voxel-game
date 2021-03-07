@@ -41,6 +41,51 @@ auto create_surface_glfw(VkInstance instance, GLFWwindow* window)
   return surface;
 }
 
+void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
+                  int /*mods*/)
+{
+  auto* app = beyond::bit_cast<App*>(glfwGetWindowUserPointer(window));
+
+  if (action == GLFW_REPEAT) {
+    switch (key) {
+    case GLFW_KEY_W:
+      app->move_camera(FirstPersonCamera::Movement::FORWARD);
+      break;
+    case GLFW_KEY_A:
+      app->move_camera(FirstPersonCamera::Movement::LEFT);
+      break;
+    case GLFW_KEY_S:
+      app->move_camera(FirstPersonCamera::Movement::BACKWARD);
+      break;
+    case GLFW_KEY_D:
+      app->move_camera(FirstPersonCamera::Movement::RIGHT);
+      break;
+    }
+  }
+}
+
+static void cursor_position_callback(GLFWwindow* window, double xpos,
+                                     double ypos)
+{
+  auto* app = beyond::bit_cast<App*>(glfwGetWindowUserPointer(window));
+  if (app->dragging_status() != MouseDraggingState::No) {
+    app->mouse_move(static_cast<float>(xpos), static_cast<float>(ypos));
+  }
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action,
+                           int /*mods*/)
+{
+  auto* app = beyond::bit_cast<App*>(glfwGetWindowUserPointer(window));
+  if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+    if (action == GLFW_PRESS) {
+      app->mouse_dragging(true);
+    } else if (action == GLFW_RELEASE) {
+      app->mouse_dragging(false);
+    }
+  }
+}
+
 } // namespace
 
 App::App()
@@ -58,6 +103,11 @@ App::App()
                               static_cast<std::uint32_t>(window_height)};
 
   glfwMakeContextCurrent(window_);
+
+  glfwSetKeyCallback(window_, key_callback);
+  glfwSetWindowUserPointer(window_, this);
+  glfwSetCursorPosCallback(window_, cursor_position_callback);
+  glfwSetMouseButtonCallback(window_, mouse_button_callback);
 
   init_vk_device();
   init_swapchain();
@@ -119,6 +169,29 @@ App::~App()
 
   glfwDestroyWindow(window_);
   glfwTerminate();
+}
+
+void App::move_camera(FirstPersonCamera::Movement movement)
+{
+  camera_.process_keyboard(movement, 0.1f);
+}
+
+void App::mouse_dragging(bool is_dragging)
+{
+  dragging_ = is_dragging ? MouseDraggingState::Start : MouseDraggingState::No;
+}
+
+void App::mouse_move(float x, float y)
+{
+  if (dragging_ == MouseDraggingState::Start) {
+    last_mouse_x_ = x;
+    last_mouse_y_ = y;
+    dragging_ = MouseDraggingState::Dragging;
+  }
+
+  camera_.process_mouse_movement(x - last_mouse_x_, y - last_mouse_y_);
+  last_mouse_x_ = x;
+  last_mouse_y_ = y;
 }
 
 void App::exec()
@@ -600,13 +673,9 @@ void App::render()
 
   const float aspect_ratio = static_cast<float>(window_extent_.width) /
                              static_cast<float>(window_extent_.height);
-  // camera view
-  constexpr beyond::Point3 cam_pos = {0.f, -6.f, -10.f};
-  const beyond::Mat4 view = beyond::look_at(
-      cam_pos, beyond::Point3{0.f, 0.f, 0.f}, beyond::Vec3{0.0f, 1.0f, 0.0f});
-  // camera projection
+  const beyond::Mat4 view = camera_.get_view_matrix();
   beyond::Mat4 projection =
-      beyond::perspective(beyond::Degree(70.f), aspect_ratio, 0.1f, 200.0f);
+      beyond::perspective(beyond::Degree(60.f), aspect_ratio, 0.1f, 200.0f);
   projection[1][1] *= -1;
 
   // fill a GPU camera data struct
