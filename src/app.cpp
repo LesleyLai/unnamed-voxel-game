@@ -80,12 +80,14 @@ App::~App()
   vkDestroyPipeline(device_, terrain_graphics_pipeline_, nullptr);
   vkDestroyPipelineLayout(device_, terrain_graphics_pipeline_layout_, nullptr);
 
-  vkDestroyFence(device_, frame_data_.render_fence_, nullptr);
-  vkDestroySemaphore(device_, frame_data_.render_semaphore_, nullptr);
-  vkDestroySemaphore(device_, frame_data_.present_semaphore_, nullptr);
-
   vkDestroyRenderPass(device_, render_pass_, nullptr);
-  vkDestroyCommandPool(device_, command_pool_, nullptr);
+
+  for (auto& frame_data : frame_data_) {
+    vkDestroyFence(device_, frame_data.render_fence_, nullptr);
+    vkDestroySemaphore(device_, frame_data.render_semaphore_, nullptr);
+    vkDestroySemaphore(device_, frame_data.present_semaphore_, nullptr);
+    vkDestroyCommandPool(device_, frame_data.command_pool_, nullptr);
+  }
 
   for (auto& framebuffer : framebuffers_) {
     vkDestroyFramebuffer(device_, framebuffer, nullptr);
@@ -232,18 +234,20 @@ void App::init_command()
       .queueFamilyIndex = graphics_queue_family_index_,
   };
 
-  VK_CHECK(vkCreateCommandPool(device_, &command_pool_create_info, nullptr,
-                               &command_pool_));
+  for (auto& frame_data : frame_data_) {
+    VK_CHECK(vkCreateCommandPool(device_, &command_pool_create_info, nullptr,
+                                 &frame_data.command_pool_));
 
-  const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .pNext = nullptr,
-      .commandPool = command_pool_,
-      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-      .commandBufferCount = 1,
-  };
-  VK_CHECK(vkAllocateCommandBuffers(device_, &command_buffer_allocate_info,
-                                    &main_command_buffer_));
+    const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .commandPool = frame_data.command_pool_,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VK_CHECK(vkAllocateCommandBuffers(device_, &command_buffer_allocate_info,
+                                      &frame_data.main_command_buffer_));
+  }
 }
 void App::init_render_pass()
 {
@@ -350,18 +354,21 @@ void App::init_sync_strucures()
       .pNext = nullptr,
       .flags = 0,
   };
-  VK_CHECK(vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
-                             &frame_data_.render_semaphore_));
-  VK_CHECK(vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
-                             &frame_data_.present_semaphore_));
 
   const VkFenceCreateInfo fence_create_info{
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
       .pNext = nullptr,
       .flags = 0,
   };
-  VK_CHECK(vkCreateFence(device_, &fence_create_info, nullptr,
-                         &frame_data_.render_fence_));
+
+  for (auto& frame_Data : frame_data_) {
+    VK_CHECK(vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
+                               &frame_Data.render_semaphore_));
+    VK_CHECK(vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
+                               &frame_Data.present_semaphore_));
+    VK_CHECK(vkCreateFence(device_, &fence_create_info, nullptr,
+                           &frame_Data.render_fence_));
+  }
 }
 
 void App::init_pipeline()
@@ -504,18 +511,19 @@ void App::init_pipeline()
 
 void App::render()
 {
+  auto current_frame_data = get_current_frame();
   static constexpr std::uint64_t time_out = 1e9;
-  VK_CHECK(
-      vkWaitForFences(device_, 1, &frame_data_.render_fence_, true, time_out));
-  VK_CHECK(vkResetFences(device_, 1, &frame_data_.render_fence_));
+  VK_CHECK(vkWaitForFences(device_, 1, &current_frame_data.render_fence_, true,
+                           time_out));
+  VK_CHECK(vkResetFences(device_, 1, &current_frame_data.render_fence_));
 
   uint32_t swapchain_image_index = 0;
   VK_CHECK(vkAcquireNextImageKHR(device_, swapchain_, time_out,
-                                 frame_data_.present_semaphore_, nullptr,
+                                 current_frame_data.present_semaphore_, nullptr,
                                  &swapchain_image_index));
-  VK_CHECK(vkResetCommandBuffer(main_command_buffer_, 0));
+  VK_CHECK(vkResetCommandBuffer(current_frame_data.main_command_buffer_, 0));
 
-  VkCommandBuffer cmd = main_command_buffer_;
+  VkCommandBuffer cmd = current_frame_data.main_command_buffer_;
   static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .pNext = nullptr,
@@ -565,21 +573,21 @@ void App::render()
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .pNext = nullptr,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &frame_data_.present_semaphore_,
+      .pWaitSemaphores = &current_frame_data.present_semaphore_,
       .pWaitDstStageMask = &wait_stage,
       .commandBufferCount = 1,
-      .pCommandBuffers = &main_command_buffer_,
+      .pCommandBuffers = &current_frame_data.main_command_buffer_,
       .signalSemaphoreCount = 1,
-      .pSignalSemaphores = &frame_data_.render_semaphore_,
+      .pSignalSemaphores = &current_frame_data.render_semaphore_,
   };
   VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit_info,
-                         frame_data_.render_fence_));
+                         current_frame_data.render_fence_));
 
   const VkPresentInfoKHR present_info = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .pNext = nullptr,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &frame_data_.render_semaphore_,
+      .pWaitSemaphores = &current_frame_data.render_semaphore_,
       .swapchainCount = 1,
       .pSwapchains = &swapchain_,
       .pImageIndices = &swapchain_image_index,
@@ -651,4 +659,8 @@ void App::upload_mesh(Mesh& mesh)
                 terrain_mesh_.indices_.size() * sizeof(std::uint32_t));
     vmaUnmapMemory(allocator_, mesh.index_buffer_.allocation_);
   }
+}
+auto App::get_current_frame() -> FrameData&
+{
+  return frame_data_[frame_number_ % frames_in_flight];
 }

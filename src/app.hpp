@@ -18,7 +18,11 @@ struct FrameData {
   VkSemaphore render_semaphore_{};
   VkSemaphore present_semaphore_{};
   VkFence render_fence_{};
+
+  VkCommandPool command_pool_{};
+  VkCommandBuffer main_command_buffer_{};
 };
+constexpr std::uint32_t frames_in_flight = 2;
 
 struct AllocatedBuffer {
   VkBuffer buffer_{};
@@ -92,14 +96,11 @@ class App {
   AllocatedImage depth_image_{};
   VkFormat depth_image_format_{};
 
-  VkCommandPool command_pool_{};
-  VkCommandBuffer main_command_buffer_{};
-
   VkRenderPass render_pass_{};
   std::vector<VkFramebuffer> framebuffers_{};
 
   std::uint32_t frame_number_ = 0;
-  FrameData frame_data_{};
+  FrameData frame_data_[frames_in_flight]{};
 
   VkPipelineLayout terrain_graphics_pipeline_layout_{};
   VkPipeline terrain_graphics_pipeline_{};
@@ -125,6 +126,8 @@ private:
   void init_framebuffer();
   void init_sync_strucures();
   void init_pipeline();
+
+  [[nodiscard]] auto get_current_frame() -> FrameData&;
 
   void render();
   void load_mesh();
