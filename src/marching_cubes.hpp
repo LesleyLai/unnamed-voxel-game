@@ -30,11 +30,11 @@ struct Vertex {
          {.location = 1,
           .binding = 0,
           .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, position)},
+          .offset = offsetof(Vertex, normal)},
          {.location = 2,
           .binding = 0,
           .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, position)}});
+          .offset = offsetof(Vertex, color)}});
   }
 };
 
