@@ -1,0 +1,6 @@
+* Stream Log
+** March 06, 2021 Stream 1: Setup
+   Setup Vulkan Device, swapchain, renderpass, graphics pipeline, vertex buffers. descriptors and uniform buffers, depth buffers, double buffering.
+   Afterward setup a first-person camera, and make marching cube working.
+
+   Link: https://youtu.be/rnbcvbJox7g
