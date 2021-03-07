@@ -93,6 +93,8 @@ App::~App()
   for (auto& image_view : swapchain_image_views_) {
     vkDestroyImageView(device_, image_view, nullptr);
   }
+  vkDestroyImageView(device_, depth_image_view_, nullptr);
+  vmaDestroyImage(allocator_, depth_image_.image_, depth_image_.allocation_);
   vkDestroySwapchainKHR(device_, swapchain_, nullptr);
 
   vmaDestroyAllocator(allocator_);
@@ -178,6 +180,47 @@ void App::init_swapchain()
   swapchain_images_ = vkb_swapchain.get_images().value();
   swapchain_image_views_ = vkb_swapchain.get_image_views().value();
   swapchain_image_format_ = vkb_swapchain.image_format;
+
+  depth_image_format_ = VK_FORMAT_D32_SFLOAT;
+
+  const VkExtent3D depth_extent = {window_extent_.width, window_extent_.height,
+                                   1};
+  const VkImageCreateInfo depth_image_create_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .pNext = nullptr,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = depth_image_format_,
+      .extent = depth_extent,
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+  };
+  constexpr VmaAllocationCreateInfo depth_image_allocation_create_info = {
+      .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+      .requiredFlags =
+          VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+  };
+  vmaCreateImage(allocator_, &depth_image_create_info,
+                 &depth_image_allocation_create_info, &depth_image_.image_,
+                 &depth_image_.allocation_, nullptr);
+
+  const VkImageViewCreateInfo depth_view_create_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .pNext = nullptr,
+      .image = depth_image_.image_,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = depth_image_format_,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      }};
+  vkCreateImageView(device_, &depth_view_create_info, nullptr,
+                    &depth_image_view_);
 }
 
 void App::init_command()
@@ -222,6 +265,23 @@ void App::init_render_pass()
       .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
   };
 
+  const VkAttachmentDescription depth_attachment = {
+      .flags = 0,
+      .format = depth_image_format_,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
+
+  static constexpr VkAttachmentReference depth_attachment_ref = {
+      .attachment = 1,
+      .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
+
   static constexpr VkSubpassDescription subpass = {
       .flags = 0,
       .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -230,16 +290,19 @@ void App::init_render_pass()
       .colorAttachmentCount = 1,
       .pColorAttachments = &color_attachment_ref,
       .pResolveAttachments = nullptr,
-      .pDepthStencilAttachment = nullptr,
+      .pDepthStencilAttachment = &depth_attachment_ref,
       .preserveAttachmentCount = 0,
       .pPreserveAttachments = nullptr};
+
+  const VkAttachmentDescription attachments[] = {color_attachment,
+                                                 depth_attachment};
 
   const VkRenderPassCreateInfo render_pass_create_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
       .pNext = nullptr,
       .flags = 0,
-      .attachmentCount = 1,
-      .pAttachments = &color_attachment,
+      .attachmentCount = beyond::size(attachments),
+      .pAttachments = beyond::to_pointer(attachments),
       .subpassCount = 1,
       .pSubpasses = &subpass,
       .dependencyCount = 0,
@@ -271,7 +334,10 @@ void App::init_framebuffer()
 
   // create framebuffers for each of the swapchain image views
   for (std::uint32_t i = 0; i < swapchain_imagecount; ++i) {
-    framebuffer_create_info.pAttachments = &swapchain_image_views_[i];
+    const VkImageView attachments[] = {swapchain_image_views_[i],
+                                       depth_image_view_};
+    framebuffer_create_info.pAttachments = beyond::to_pointer(attachments);
+    framebuffer_create_info.attachmentCount = beyond::size(attachments);
     VK_CHECK(vkCreateFramebuffer(device_, &framebuffer_create_info, nullptr,
                                  &framebuffers_[i]));
   }
@@ -399,7 +465,19 @@ void App::init_pipeline()
     throw std::runtime_error("failed to create pipeline layout!");
   }
 
-  VkGraphicsPipelineCreateInfo pipeline_create_info{
+  const VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .pNext = nullptr,
+      .depthTestEnable = VK_TRUE,
+      .depthWriteEnable = VK_TRUE,
+      .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+      .depthBoundsTestEnable = VK_FALSE,
+      .stencilTestEnable = VK_FALSE,
+      .minDepthBounds = 0.0f, // Optional
+      .maxDepthBounds = 1.0f, // Optional
+  };
+
+  const VkGraphicsPipelineCreateInfo pipeline_create_info{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .stageCount = beyond::size(shader_stages),
       .pStages = beyond::to_pointer(shader_stages),
@@ -408,6 +486,7 @@ void App::init_pipeline()
       .pViewportState = &viewport_state,
       .pRasterizationState = &rasterizer,
       .pMultisampleState = &multisampling,
+      .pDepthStencilState = &depth_stencil_state,
       .pColorBlendState = &color_blending,
       .layout = terrain_graphics_pipeline_layout_,
       .renderPass = render_pass_,
@@ -448,6 +527,9 @@ void App::render()
   const float flash =
       std::abs(std::sin(static_cast<float>(frame_number_) / 120.f));
   const VkClearValue clear_value = {.color = {{0.0f, 0.0f, flash, 1.0f}}};
+  const VkClearValue depth_clear_value = {.depthStencil = {.depth = 1.f}};
+
+  const VkClearValue clear_values[] = {clear_value, depth_clear_value};
 
   const VkRenderPassBeginInfo render_pass_begin_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -455,8 +537,8 @@ void App::render()
       .renderPass = render_pass_,
       .framebuffer = framebuffers_[swapchain_image_index],
       .renderArea = {.offset = {.x = 0, .y = 0}, .extent = window_extent_},
-      .clearValueCount = 1,
-      .pClearValues = &clear_value,
+      .clearValueCount = beyond::size(clear_values),
+      .pClearValues = beyond::to_pointer(clear_values),
   };
 
   vkCmdBeginRenderPass(cmd, &render_pass_begin_info,

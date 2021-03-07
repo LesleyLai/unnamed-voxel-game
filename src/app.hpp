@@ -21,13 +21,13 @@ struct FrameData {
 };
 
 struct AllocatedBuffer {
-  VkBuffer buffer_;
-  VmaAllocation allocation_;
+  VkBuffer buffer_{};
+  VmaAllocation allocation_{};
+};
 
-  explicit(false) operator VkBuffer()
-  {
-    return buffer_;
-  }
+struct AllocatedImage {
+  VkImage image_{};
+  VmaAllocation allocation_{};
 };
 
 struct Vertex {
@@ -87,6 +87,10 @@ class App {
   std::vector<VkImage> swapchain_images_{};
   std::vector<VkImageView> swapchain_image_views_{};
   VkFormat swapchain_image_format_{};
+
+  VkImageView depth_image_view_{};
+  AllocatedImage depth_image_{};
+  VkFormat depth_image_format_{};
 
   VkCommandPool command_pool_{};
   VkCommandBuffer main_command_buffer_{};
