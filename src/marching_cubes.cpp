@@ -379,7 +379,6 @@ std::vector<Triangle> polygonise(GridCell grid, float isolevel)
   /* Create the triangle */
   std::vector<Triangle> triangles;
   for (std::uint32_t i = 0; tri_table[cubeindex][i] != -1; i += 3) {
-    // TODO: emplace_back?
     triangles.push_back({.p = {vertlist[tri_table[cubeindex][i]],
                                vertlist[tri_table[cubeindex][i + 1]],
                                vertlist[tri_table[cubeindex][i + 2]]}});

@@ -20,7 +20,7 @@ add_library(common
         first_person_camera.hpp
         marching_cubes.hpp
         marching_cubes.cpp
-        )
+        window_helpers/window_manager.cpp window_helpers/window_manager.hpp window_helpers/window.cpp window_helpers/window.hpp)
 target_link_libraries(common
         PUBLIC
         CONAN_PKG::fmt
@@ -36,7 +36,7 @@ target_include_directories(common PUBLIC "${CMAKE_SOURCE_DIR}/include")
 add_dependencies(common vertShader)
 add_dependencies(common fragShader)
 
-add_executable(app "main.cpp" marching_cubes.cpp marching_cubes.hpp mesh.hpp)
+add_executable(app "main.cpp")
 target_link_libraries(app
         PRIVATE common compiler_options)
 add_clangformat(app)

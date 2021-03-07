@@ -12,9 +12,6 @@
 
 #include "vulkan_helpers/shader_module.hpp"
 
-#define CHECK_GLFW(glfw_call)                                                  \
-  if (!(glfw_call)) { beyond::panic("GLFW fatal error\n"); }
-
 #define VK_CHECK(x)                                                            \
   do {                                                                         \
     VkResult err = x;                                                          \
@@ -88,26 +85,22 @@ void mouse_button_callback(GLFWwindow* window, int button, int action,
 
 } // namespace
 
-App::App()
+App::App() : window_manager_{&WindowManager::instance()}
 {
-  CHECK_GLFW(glfwInit());
-
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   static constexpr int window_width = 1400;
   static constexpr int window_height = 900;
-  window_ = glfwCreateWindow(window_width, window_height, "Voxel Game", nullptr,
-                             nullptr);
-  if (!window_) { std::exit(1); }
+  window_ = Window(window_width, window_height, "Voxel Game");
   window_extent_ = VkExtent2D{static_cast<std::uint32_t>(window_width),
                               static_cast<std::uint32_t>(window_height)};
 
-  glfwMakeContextCurrent(window_);
+  glfwMakeContextCurrent(window_.glfw_window());
 
-  glfwSetKeyCallback(window_, key_callback);
-  glfwSetWindowUserPointer(window_, this);
-  glfwSetCursorPosCallback(window_, cursor_position_callback);
-  glfwSetMouseButtonCallback(window_, mouse_button_callback);
+  glfwSetKeyCallback(window_.glfw_window(), key_callback);
+  glfwSetWindowUserPointer(window_.glfw_window(), this);
+  glfwSetCursorPosCallback(window_.glfw_window(), cursor_position_callback);
+  glfwSetMouseButtonCallback(window_.glfw_window(), mouse_button_callback);
 
   init_vk_device();
   init_swapchain();
@@ -166,9 +159,6 @@ App::~App()
   vkDestroySurfaceKHR(instance_, surface_, nullptr);
   vkb::destroy_debug_utils_messenger(instance_, debug_messenger_, nullptr);
   vkDestroyInstance(instance_, nullptr);
-
-  glfwDestroyWindow(window_);
-  glfwTerminate();
 }
 
 void App::move_camera(FirstPersonCamera::Movement movement)
@@ -196,11 +186,11 @@ void App::mouse_move(float x, float y)
 
 void App::exec()
 {
-  while (!glfwWindowShouldClose(window_)) {
+  while (!window_.should_close()) {
     render();
 
-    glfwSwapBuffers(window_);
-    glfwPollEvents();
+    window_.swap_buffers();
+    window_manager_->pull_events();
   }
 }
 
@@ -218,7 +208,7 @@ void App::init_vk_device()
   }
   instance_ = instance_ret->instance;
   debug_messenger_ = instance_ret->debug_messenger;
-  surface_ = create_surface_glfw(instance_, window_);
+  surface_ = create_surface_glfw(instance_, window_.glfw_window());
 
   vkb::PhysicalDeviceSelector phys_device_selector(instance_ret.value());
   auto phys_device_ret = phys_device_selector.set_surface(surface_).select();

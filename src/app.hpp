@@ -15,6 +15,9 @@
 #include <beyond/math/point.hpp>
 #include <beyond/math/vector.hpp>
 
+#include "window_helpers/window.hpp"
+#include "window_helpers/window_manager.hpp"
+
 #include "first_person_camera.hpp"
 #include "marching_cubes.hpp"
 
@@ -53,7 +56,6 @@ struct AllocatedImage {
   VmaAllocation allocation{};
 };
 
-
 struct Mesh {
   std::vector<Vertex> vertices_;
   std::vector<std::uint32_t> indices_;
@@ -64,7 +66,9 @@ struct Mesh {
 enum class MouseDraggingState { No, Start, Dragging };
 
 class App {
-  GLFWwindow* window_ = nullptr;
+  WindowManager* window_manager_ = nullptr;
+  Window window_;
+
   VkExtent2D window_extent_{};
 
   VkInstance instance_{};
