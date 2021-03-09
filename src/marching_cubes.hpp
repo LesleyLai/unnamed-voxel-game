@@ -6,6 +6,8 @@
 #include <beyond/math/point.hpp>
 #include <beyond/math/vector.hpp>
 
+#include <vector>
+
 struct Vertex {
   beyond::Point3 position;
   beyond::Vec3 normal;
