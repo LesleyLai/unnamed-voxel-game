@@ -19,7 +19,7 @@ Checks: '*,
 -google-readability-braces-around-statements,
 -hicpp-signed-bitwise,
 -hicpp-uppercase-literal-suffix,
--hicpp-braces-around-statements
+-*-braces-around-statements,
 '
 WarningsAsErrors: '*'
 HeaderFilterRegex: 'catch.hpp'

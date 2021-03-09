@@ -291,6 +291,12 @@ static constexpr std::int8_t tri_table[256][16] =
      {0, 9, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
      {0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
      {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
+
+// Vertex indices for each edge
+static constexpr std::uint8_t vert_table[12][2] = {
+    {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
+    {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}
+};
 // clang-format on
 
 struct Triangle {
@@ -333,67 +339,24 @@ void polygonise(GridCell cell, float isolevel, std::vector<Vertex>& positions)
      tells us which vertices are inside of the surface
   */
   std::uint8_t cubeindex = 0;
-  if (cell.val[0] < isolevel) cubeindex |= 1;
-  if (cell.val[1] < isolevel) cubeindex |= 2;
-  if (cell.val[2] < isolevel) cubeindex |= 4;
-  if (cell.val[3] < isolevel) cubeindex |= 8;
-  if (cell.val[4] < isolevel) cubeindex |= 16;
-  if (cell.val[5] < isolevel) cubeindex |= 32;
-  if (cell.val[6] < isolevel) cubeindex |= 64;
-  if (cell.val[7] < isolevel) cubeindex |= 128;
+  for (unsigned int i = 0; i < 8; ++i) {
+    if (cell.val[i] < isolevel) {
+      cubeindex |= static_cast<std::uint8_t>(1u << i);
+    }
+  }
 
+  const std::uint16_t edge_set = edge_table[cubeindex];
   /* Cube is entirely in/out of the surface */
-  if (edge_table[cubeindex] == 0) return;
+  if (edge_set == 0) return;
 
   /* Find the vertices where the surface intersects the cube */
   beyond::Point3 vertlist[12] = {};
-  if (edge_table[cubeindex] & 1) {
-    vertlist[0] =
-        vertex_interp(isolevel, cell.p[0], cell.p[1], cell.val[0], cell.val[1]);
-  }
-  if (edge_table[cubeindex] & 2) {
-    vertlist[1] =
-        vertex_interp(isolevel, cell.p[1], cell.p[2], cell.val[1], cell.val[2]);
-  }
-  if (edge_table[cubeindex] & 4) {
-    vertlist[2] =
-        vertex_interp(isolevel, cell.p[2], cell.p[3], cell.val[2], cell.val[3]);
-  }
-  if (edge_table[cubeindex] & 8) {
-    vertlist[3] =
-        vertex_interp(isolevel, cell.p[3], cell.p[0], cell.val[3], cell.val[0]);
-  }
-  if (edge_table[cubeindex] & 16) {
-    vertlist[4] =
-        vertex_interp(isolevel, cell.p[4], cell.p[5], cell.val[4], cell.val[5]);
-  }
-  if (edge_table[cubeindex] & 32) {
-    vertlist[5] =
-        vertex_interp(isolevel, cell.p[5], cell.p[6], cell.val[5], cell.val[6]);
-  }
-  if (edge_table[cubeindex] & 64) {
-    vertlist[6] =
-        vertex_interp(isolevel, cell.p[6], cell.p[7], cell.val[6], cell.val[7]);
-  }
-  if (edge_table[cubeindex] & 128) {
-    vertlist[7] =
-        vertex_interp(isolevel, cell.p[7], cell.p[4], cell.val[7], cell.val[4]);
-  }
-  if (edge_table[cubeindex] & 256) {
-    vertlist[8] =
-        vertex_interp(isolevel, cell.p[0], cell.p[4], cell.val[0], cell.val[4]);
-  }
-  if (edge_table[cubeindex] & 512) {
-    vertlist[9] =
-        vertex_interp(isolevel, cell.p[1], cell.p[5], cell.val[1], cell.val[5]);
-  }
-  if (edge_table[cubeindex] & 1024) {
-    vertlist[10] =
-        vertex_interp(isolevel, cell.p[2], cell.p[6], cell.val[2], cell.val[6]);
-  }
-  if (edge_table[cubeindex] & 2048) {
-    vertlist[11] =
-        vertex_interp(isolevel, cell.p[3], cell.p[7], cell.val[3], cell.val[7]);
+  for (std::uint16_t i = 0; i < 12; ++i) {
+    if (edge_set & (1 << i)) {
+      vertlist[i] = vertex_interp(
+          isolevel, cell.p[vert_table[i][0]], cell.p[vert_table[i][1]],
+          cell.val[vert_table[i][0]], cell.val[vert_table[i][1]]);
+    }
   }
 
   /* Create the triangle */
