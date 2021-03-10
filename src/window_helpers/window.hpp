@@ -3,6 +3,8 @@
 
 #include <utility>
 
+#include <beyond/utils/force_inline.hpp>
+
 struct GLFWwindow;
 
 class Window {
@@ -17,14 +19,14 @@ public:
 
   ~Window();
 
-  [[nodiscard]] auto glfw_window() noexcept -> GLFWwindow*
-  {
-    return window_;
-  }
-
   void swap_buffers() noexcept;
 
   [[nodiscard]] auto should_close() const noexcept -> bool;
+
+  [[nodiscard]] BEYOND_FORCE_INLINE auto glfw_window() noexcept -> GLFWwindow*
+  {
+    return window_;
+  }
 
 private:
   GLFWwindow* window_ = nullptr;

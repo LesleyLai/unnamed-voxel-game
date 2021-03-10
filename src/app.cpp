@@ -11,32 +11,9 @@
 #include <beyond/math/transform.hpp>
 
 #include "vulkan_helpers/shader_module.hpp"
-
-#define VK_CHECK(x)                                                            \
-  do {                                                                         \
-    VkResult err = x;                                                          \
-    if (err) { fmt::format("Vulkan error: {}\n", err); }                       \
-  } while (0)
+#include "vulkan_helpers/vk_check.hpp"
 
 namespace {
-
-auto create_surface_glfw(VkInstance instance, GLFWwindow* window)
-    -> VkSurfaceKHR
-{
-  VkSurfaceKHR surface = VK_NULL_HANDLE;
-  VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
-  if (err) {
-    const char* error_msg = nullptr;
-    int ret = glfwGetError(&error_msg);
-    if (ret != 0) {
-      fmt::print("{} ", ret);
-      if (error_msg != nullptr) { fmt::print("{}", error_msg); }
-      fmt::print("\n");
-    }
-    surface = VK_NULL_HANDLE;
-  }
-  return surface;
-}
 
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
                   int /*mods*/)
@@ -102,7 +79,8 @@ App::App() : window_manager_{&WindowManager::instance()}
   glfwSetCursorPosCallback(window_.glfw_window(), cursor_position_callback);
   glfwSetMouseButtonCallback(window_.glfw_window(), mouse_button_callback);
 
-  init_vk_device();
+  context_ = vkh::Context(window_);
+
   init_swapchain();
   init_command();
   init_render_pass();
@@ -115,50 +93,47 @@ App::App() : window_manager_{&WindowManager::instance()}
 
 App::~App()
 {
-  if (!device_) { return; }
+  if (!context_) { return; }
 
-  vkDeviceWaitIdle(device_);
+  context_.wait_idle();
 
-  //  vmaDestroyBuffer(allocator_, terrain_mesh_.index_buffer_.buffer,
+  //  vmaDestroyBuffer(context_.allocator(), terrain_mesh_.index_buffer_.buffer,
   //                   terrain_mesh_.index_buffer_.allocation);
-  vmaDestroyBuffer(allocator_, terrain_mesh_.vertex_buffer_.buffer,
+  vmaDestroyBuffer(context_.allocator(), terrain_mesh_.vertex_buffer_.buffer,
                    terrain_mesh_.vertex_buffer_.allocation);
 
-  vkDestroyPipeline(device_, terrain_graphics_pipeline_, nullptr);
-  vkDestroyPipelineLayout(device_, terrain_graphics_pipeline_layout_, nullptr);
+  vkDestroyPipeline(context_.device(), terrain_graphics_pipeline_, nullptr);
+  vkDestroyPipelineLayout(context_.device(), terrain_graphics_pipeline_layout_,
+                          nullptr);
 
-  vkDestroyRenderPass(device_, render_pass_, nullptr);
+  vkDestroyRenderPass(context_.device(), render_pass_, nullptr);
 
   for (auto& frame_data : frame_data_) {
 
-    vmaDestroyBuffer(allocator_, frame_data.camera_buffer.buffer,
+    vmaDestroyBuffer(context_.allocator(), frame_data.camera_buffer.buffer,
                      frame_data.camera_buffer.allocation);
 
-    vkDestroyFence(device_, frame_data.render_fence, nullptr);
-    vkDestroySemaphore(device_, frame_data.render_semaphore, nullptr);
-    vkDestroySemaphore(device_, frame_data.present_semaphore, nullptr);
-    vkDestroyCommandPool(device_, frame_data.command_pool, nullptr);
+    vkDestroyFence(context_.device(), frame_data.render_fence, nullptr);
+    vkDestroySemaphore(context_.device(), frame_data.render_semaphore, nullptr);
+    vkDestroySemaphore(context_.device(), frame_data.present_semaphore,
+                       nullptr);
+    vkDestroyCommandPool(context_.device(), frame_data.command_pool, nullptr);
   }
 
-  vkDestroyDescriptorPool(device_, descriptor_pool_, nullptr);
-  vkDestroyDescriptorSetLayout(device_, global_descriptor_set_layout_, nullptr);
+  vkDestroyDescriptorPool(context_.device(), descriptor_pool_, nullptr);
+  vkDestroyDescriptorSetLayout(context_.device(), global_descriptor_set_layout_,
+                               nullptr);
 
   for (auto& framebuffer : framebuffers_) {
-    vkDestroyFramebuffer(device_, framebuffer, nullptr);
+    vkDestroyFramebuffer(context_.device(), framebuffer, nullptr);
   }
   for (auto& image_view : swapchain_image_views_) {
-    vkDestroyImageView(device_, image_view, nullptr);
+    vkDestroyImageView(context_.device(), image_view, nullptr);
   }
-  vkDestroyImageView(device_, depth_image_view_, nullptr);
-  vmaDestroyImage(allocator_, depth_image_.image, depth_image_.allocation);
-  vkDestroySwapchainKHR(device_, swapchain_, nullptr);
-
-  vmaDestroyAllocator(allocator_);
-
-  vkDestroyDevice(device_, nullptr);
-  vkDestroySurfaceKHR(instance_, surface_, nullptr);
-  vkb::destroy_debug_utils_messenger(instance_, debug_messenger_, nullptr);
-  vkDestroyInstance(instance_, nullptr);
+  vkDestroyImageView(context_.device(), depth_image_view_, nullptr);
+  vmaDestroyImage(context_.allocator(), depth_image_.image,
+                  depth_image_.allocation);
+  vkDestroySwapchainKHR(context_.device(), swapchain_, nullptr);
 }
 
 void App::move_camera(FirstPersonCamera::Movement movement)
@@ -194,56 +169,10 @@ void App::exec()
   }
 }
 
-void App::init_vk_device()
-{
-
-  auto instance_ret = vkb::InstanceBuilder{}
-                          .require_api_version(1, 2, 0)
-                          .use_default_debug_messenger()
-                          .request_validation_layers()
-                          .build();
-  if (!instance_ret) {
-    fmt::print("{}\n", instance_ret.error().message());
-    std::exit(-1);
-  }
-  instance_ = instance_ret->instance;
-  debug_messenger_ = instance_ret->debug_messenger;
-  surface_ = create_surface_glfw(instance_, window_.glfw_window());
-
-  vkb::PhysicalDeviceSelector phys_device_selector(instance_ret.value());
-  auto phys_device_ret = phys_device_selector.set_surface(surface_).select();
-  if (!phys_device_ret) {
-    fmt::print("{}\n", phys_device_ret.error().message());
-    std::exit(-1);
-  }
-  vkb::PhysicalDevice vkb_physical_device = phys_device_ret.value();
-  physical_device_ = vkb_physical_device.physical_device;
-
-  vkb::DeviceBuilder device_builder{vkb_physical_device};
-  auto device_ret = device_builder.build();
-  if (!device_ret) {
-    fmt::print("{}\n", device_ret.error().message());
-    std::exit(-1);
-  }
-  auto vkb_device = device_ret.value();
-  device_ = vkb_device.device;
-
-  graphics_queue_ = vkb_device.get_queue(vkb::QueueType::graphics).value();
-  graphics_queue_family_index_ =
-      vkb_device.get_queue_index(vkb::QueueType::graphics).value();
-  present_queue_ = vkb_device.get_queue(vkb::QueueType::present).value();
-
-  const VmaAllocatorCreateInfo allocator_create_info{
-      .physicalDevice = physical_device_,
-      .device = device_,
-      .instance = instance_,
-  };
-  VK_CHECK(vmaCreateAllocator(&allocator_create_info, &allocator_));
-}
-
 void App::init_swapchain()
 {
-  vkb::SwapchainBuilder swapchain_builder{physical_device_, device_, surface_};
+  vkb::SwapchainBuilder swapchain_builder{
+      context_.physical_device(), context_.device(), context_.surface()};
 
   vkb::Swapchain vkb_swapchain =
       swapchain_builder.use_default_format_selection()
@@ -278,7 +207,7 @@ void App::init_swapchain()
       .requiredFlags =
           VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
   };
-  vmaCreateImage(allocator_, &depth_image_create_info,
+  vmaCreateImage(context_.allocator(), &depth_image_create_info,
                  &depth_image_allocation_create_info, &depth_image_.image,
                  &depth_image_.allocation, nullptr);
 
@@ -295,7 +224,7 @@ void App::init_swapchain()
           .baseArrayLayer = 0,
           .layerCount = 1,
       }};
-  vkCreateImageView(device_, &depth_view_create_info, nullptr,
+  vkCreateImageView(context_.device(), &depth_view_create_info, nullptr,
                     &depth_image_view_);
 }
 
@@ -305,12 +234,12 @@ void App::init_command()
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .pNext = nullptr,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-      .queueFamilyIndex = graphics_queue_family_index_,
+      .queueFamilyIndex = context_.graphics_queue_family_index(),
   };
 
   for (auto& frame_data : frame_data_) {
-    VK_CHECK(vkCreateCommandPool(device_, &command_pool_create_info, nullptr,
-                                 &frame_data.command_pool));
+    VK_CHECK(vkCreateCommandPool(context_.device(), &command_pool_create_info,
+                                 nullptr, &frame_data.command_pool));
 
     const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -319,7 +248,8 @@ void App::init_command()
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    VK_CHECK(vkAllocateCommandBuffers(device_, &command_buffer_allocate_info,
+    VK_CHECK(vkAllocateCommandBuffers(context_.device(),
+                                      &command_buffer_allocate_info,
                                       &frame_data.main_command_buffer));
   }
 }
@@ -387,8 +317,8 @@ void App::init_render_pass()
       .pDependencies = nullptr,
   };
 
-  VK_CHECK(vkCreateRenderPass(device_, &render_pass_create_info, nullptr,
-                              &render_pass_));
+  VK_CHECK(vkCreateRenderPass(context_.device(), &render_pass_create_info,
+                              nullptr, &render_pass_));
 }
 
 void App::init_framebuffer()
@@ -416,8 +346,8 @@ void App::init_framebuffer()
                                        depth_image_view_};
     framebuffer_create_info.pAttachments = beyond::to_pointer(attachments);
     framebuffer_create_info.attachmentCount = beyond::size(attachments);
-    VK_CHECK(vkCreateFramebuffer(device_, &framebuffer_create_info, nullptr,
-                                 &framebuffers_[i]));
+    VK_CHECK(vkCreateFramebuffer(context_.device(), &framebuffer_create_info,
+                                 nullptr, &framebuffers_[i]));
   }
 }
 
@@ -436,11 +366,11 @@ void App::init_sync_strucures()
   };
 
   for (auto& frame_Data : frame_data_) {
-    VK_CHECK(vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
-                               &frame_Data.render_semaphore));
-    VK_CHECK(vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
-                               &frame_Data.present_semaphore));
-    VK_CHECK(vkCreateFence(device_, &fence_create_info, nullptr,
+    VK_CHECK(vkCreateSemaphore(context_.device(), &semaphore_create_info,
+                               nullptr, &frame_Data.render_semaphore));
+    VK_CHECK(vkCreateSemaphore(context_.device(), &semaphore_create_info,
+                               nullptr, &frame_Data.present_semaphore));
+    VK_CHECK(vkCreateFence(context_.device(), &fence_create_info, nullptr,
                            &frame_Data.render_fence));
   }
 }
@@ -473,10 +403,11 @@ void App::init_descriptors()
       .pPoolSizes = beyond::to_pointer(pool_sizes),
   };
 
-  vkCreateDescriptorPool(device_, &pool_info, nullptr, &descriptor_pool_);
+  vkCreateDescriptorPool(context_.device(), &pool_info, nullptr,
+                         &descriptor_pool_);
 
-  VK_CHECK(vkCreateDescriptorSetLayout(device_, &set_layout_create_info,
-                                       nullptr,
+  VK_CHECK(vkCreateDescriptorSetLayout(context_.device(),
+                                       &set_layout_create_info, nullptr,
                                        &global_descriptor_set_layout_));
 
   for (auto& frame_data : frame_data_) {
@@ -495,7 +426,7 @@ void App::init_descriptors()
         .pSetLayouts = &global_descriptor_set_layout_,
     };
 
-    vkAllocateDescriptorSets(device_, &alloc_info,
+    vkAllocateDescriptorSets(context_.device(), &alloc_info,
                              &frame_data.global_descriptor);
 
     const VkDescriptorBufferInfo buffer_info = {
@@ -514,16 +445,16 @@ void App::init_descriptors()
         .pBufferInfo = &buffer_info,
     };
 
-    vkUpdateDescriptorSets(device_, 1, &write_set, 0, nullptr);
+    vkUpdateDescriptorSets(context_.device(), 1, &write_set, 0, nullptr);
   }
 }
 
 void App::init_pipeline()
 {
   auto terrain_vert_ret =
-      vkh::create_shader_module(device_, "shaders/terrain.vert.spv");
+      vkh::create_shader_module(context_.device(), "shaders/terrain.vert.spv");
   auto terrain_frag_ret =
-      vkh::create_shader_module(device_, "shaders/terrain.frag.spv");
+      vkh::create_shader_module(context_.device(), "shaders/terrain.frag.spv");
   auto terrain_vert_shader_module = terrain_vert_ret.value();
   auto terrain_frag_shader_module = terrain_frag_ret.value();
 
@@ -614,7 +545,7 @@ void App::init_pipeline()
       .pushConstantRangeCount = 0,
   };
 
-  if (vkCreatePipelineLayout(device_, &pipeline_layout_info, nullptr,
+  if (vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
                              &terrain_graphics_pipeline_layout_) !=
       VK_SUCCESS) {
     throw std::runtime_error("failed to create pipeline layout!");
@@ -649,12 +580,12 @@ void App::init_pipeline()
       .basePipelineHandle = VK_NULL_HANDLE,
   };
 
-  VK_CHECK(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1,
+  VK_CHECK(vkCreateGraphicsPipelines(context_.device(), VK_NULL_HANDLE, 1,
                                      &pipeline_create_info, nullptr,
                                      &terrain_graphics_pipeline_));
 
-  vkDestroyShaderModule(device_, terrain_vert_shader_module, nullptr);
-  vkDestroyShaderModule(device_, terrain_frag_shader_module, nullptr);
+  vkDestroyShaderModule(context_.device(), terrain_vert_shader_module, nullptr);
+  vkDestroyShaderModule(context_.device(), terrain_frag_shader_module, nullptr);
 }
 
 void App::render()
@@ -677,17 +608,20 @@ void App::render()
 
   // and copy it to the buffer
   void* data = nullptr;
-  vmaMapMemory(allocator_, current_frame_data.camera_buffer.allocation, &data);
+  vmaMapMemory(context_.allocator(),
+               current_frame_data.camera_buffer.allocation, &data);
   memcpy(data, &camera_data, sizeof(GPUCameraData));
-  vmaUnmapMemory(allocator_, current_frame_data.camera_buffer.allocation);
+  vmaUnmapMemory(context_.allocator(),
+                 current_frame_data.camera_buffer.allocation);
 
   static constexpr std::uint64_t time_out = 1e9;
-  VK_CHECK(vkWaitForFences(device_, 1, &current_frame_data.render_fence, true,
-                           time_out));
-  VK_CHECK(vkResetFences(device_, 1, &current_frame_data.render_fence));
+  VK_CHECK(vkWaitForFences(context_.device(), 1,
+                           &current_frame_data.render_fence, true, time_out));
+  VK_CHECK(
+      vkResetFences(context_.device(), 1, &current_frame_data.render_fence));
 
   uint32_t swapchain_image_index = 0;
-  VK_CHECK(vkAcquireNextImageKHR(device_, swapchain_, time_out,
+  VK_CHECK(vkAcquireNextImageKHR(context_.device(), swapchain_, time_out,
                                  current_frame_data.present_semaphore, nullptr,
                                  &swapchain_image_index));
   VK_CHECK(vkResetCommandBuffer(current_frame_data.main_command_buffer, 0));
@@ -701,12 +635,13 @@ void App::render()
   };
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
-  const float flash =
-      std::abs(std::sin(static_cast<float>(frame_number_) / 120.f));
-  const VkClearValue clear_value = {.color = {{0.0f, 0.0f, flash, 1.0f}}};
-  const VkClearValue depth_clear_value = {.depthStencil = {.depth = 1.f}};
+  static constexpr VkClearValue clear_value = {
+      .color = {{0.0f, 0.0f, 0.0f, 1.0f}}};
+  static constexpr VkClearValue depth_clear_value = {
+      .depthStencil = {.depth = 1.f}};
 
-  const VkClearValue clear_values[] = {clear_value, depth_clear_value};
+  static constexpr VkClearValue clear_values[] = {clear_value,
+                                                  depth_clear_value};
 
   const VkRenderPassBeginInfo render_pass_begin_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -723,7 +658,7 @@ void App::render()
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     terrain_graphics_pipeline_);
-  const VkDeviceSize offset = 0;
+  static constexpr VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &terrain_mesh_.vertex_buffer_.buffer,
                          &offset);
   //  vkCmdBindIndexBuffer(cmd, terrain_mesh_.index_buffer_.buffer, offset,
@@ -751,7 +686,7 @@ void App::render()
       .signalSemaphoreCount = 1,
       .pSignalSemaphores = &current_frame_data.render_semaphore,
   };
-  VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit_info,
+  VK_CHECK(vkQueueSubmit(context_.graphics_queue(), 1, &submit_info,
                          current_frame_data.render_fence));
 
   const VkPresentInfoKHR present_info = {
@@ -764,7 +699,7 @@ void App::render()
       .pImageIndices = &swapchain_image_index,
   };
 
-  VK_CHECK(vkQueuePresentKHR(present_queue_, &present_info));
+  VK_CHECK(vkQueuePresentKHR(context_.present_queue(), &present_info));
 
   ++frame_number_;
 }
@@ -811,8 +746,8 @@ auto App::create_buffer(const BufferCreateInfo& buffer_create_info)
       .usage = buffer_create_info.memory_usage};
 
   AllocatedBuffer allocated_buffer;
-  VK_CHECK(vmaCreateBuffer(allocator_, &vk_buffer_create_info, &vma_alloc_info,
-                           &allocated_buffer.buffer,
+  VK_CHECK(vmaCreateBuffer(context_.allocator(), &vk_buffer_create_info,
+                           &vma_alloc_info, &allocated_buffer.buffer,
                            &allocated_buffer.allocation, nullptr));
   return allocated_buffer;
 }
@@ -822,8 +757,8 @@ auto App::create_buffer_from_data(const BufferCreateInfo& buffer_create_info,
 {
   AllocatedBuffer buffer = create_buffer(buffer_create_info);
   void* mapped_ptr = nullptr;
-  vmaMapMemory(allocator_, buffer.allocation, &mapped_ptr);
+  vmaMapMemory(context_.allocator(), buffer.allocation, &mapped_ptr);
   std::memcpy(mapped_ptr, data, buffer_create_info.size);
-  vmaUnmapMemory(allocator_, buffer.allocation);
+  vmaUnmapMemory(context_.allocator(), buffer.allocation);
   return buffer;
 }

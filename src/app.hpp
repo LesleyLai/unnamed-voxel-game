@@ -5,8 +5,6 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
-#include <vk_mem_alloc.h>
-
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -17,6 +15,8 @@
 
 #include "window_helpers/window.hpp"
 #include "window_helpers/window_manager.hpp"
+
+#include "vulkan_helpers/context.hpp"
 
 #include "first_person_camera.hpp"
 #include "marching_cubes.hpp"
@@ -71,15 +71,7 @@ class App {
 
   VkExtent2D window_extent_{};
 
-  VkInstance instance_{};
-  VkDebugUtilsMessengerEXT debug_messenger_{};
-  VkSurfaceKHR surface_{};
-  VkPhysicalDevice physical_device_{};
-  VkDevice device_{};
-  VkQueue graphics_queue_{};
-  uint32_t graphics_queue_family_index_ = 0;
-  VkQueue present_queue_{};
-  VmaAllocator allocator_{};
+  vkh::Context context_;
 
   VkSwapchainKHR swapchain_{};
   std::vector<VkImage> swapchain_images_{};

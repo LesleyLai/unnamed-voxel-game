@@ -1,5 +1,5 @@
-#ifndef VOXEL_GAME_SHADER_MODULE_HPP
-#define VOXEL_GAME_SHADER_MODULE_HPP
+#ifndef VOXEL_GAME_VULKAN_SHADER_MODULE_HPP
+#define VOXEL_GAME_VULKAN_SHADER_MODULE_HPP
 
 #include <beyond/types/expected.hpp>
 
@@ -14,4 +14,4 @@ namespace vkh {
 
 } // namespace vkh
 
-#endif // VOXEL_GAME_SHADER_MODULE_HPP
+#endif // VOXEL_GAME_VULKAN_SHADER_MODULE_HPP
