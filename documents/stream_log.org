@@ -1,4 +1,9 @@
 * Stream Log
+** March 07, 2021 Stream 2
+   Marching cube for multiple cells, generate per-triangle normal for marching cube, Lambertian shading
+
+   Link: https://youtu.be/hNsZKQ3hH3g
+
 ** March 06, 2021 Stream 1: Setup
    Setup Vulkan Device, swapchain, renderpass, graphics pipeline, vertex buffers. descriptors and uniform buffers, depth buffers, double buffering.
    Afterward setup a first-person camera, and make marching cube working.

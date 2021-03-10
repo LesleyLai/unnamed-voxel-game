@@ -1,5 +1,12 @@
 # Unnamed Voxel Game
 
+This repository contains a voxel game coded
+in [live streams](https://www.youtube.com/playlist?list=PLlw1FcLpWd43FgE34-xMw4PbkXCb91r6Q). It uses the Vulkan API.
+
+See the [stream log](./documents/stream_log.org) for a summary and link to each stream.
+
+## Build
+
 ### Unit test
 
 This boilerplate uses [Catch2](https://github.com/catchorg/Catch2) as the Unit Test Framework. The CMake
