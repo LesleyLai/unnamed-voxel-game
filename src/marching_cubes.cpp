@@ -385,7 +385,7 @@ void polygonise(GridCell cell, float isolevel, std::vector<Vertex>& positions)
 
 [[nodiscard]] auto noise(beyond::Point3 p) -> float
 {
-  return std::sin(p.x) + std::cos(p.y) + std::sin(p.z);
+  return beyond::dot(p, p) - 4.f;
 }
 
 [[nodiscard]] auto generate_chunk_mesh() -> std::vector<Vertex>

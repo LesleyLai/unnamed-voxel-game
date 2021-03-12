@@ -65,6 +65,8 @@ struct Mesh {
 
 enum class MouseDraggingState { No, Start, Dragging };
 
+enum class RenderMode { Fill, Wireframe };
+
 class App {
   WindowManager* window_manager_ = nullptr;
   Window window_;
@@ -93,6 +95,7 @@ class App {
 
   VkPipelineLayout terrain_graphics_pipeline_layout_{};
   VkPipeline terrain_graphics_pipeline_{};
+  VkPipeline terrain_wireframe_graphics_pipeline_{};
 
   Mesh terrain_mesh_{};
 
@@ -100,6 +103,7 @@ class App {
   MouseDraggingState dragging_ = MouseDraggingState::No;
   float last_mouse_x_{};
   float last_mouse_y_{};
+  RenderMode render_mode_ = RenderMode::Fill;
 
 public:
   App();
@@ -119,6 +123,16 @@ public:
     return dragging_;
   }
   void mouse_move(float x, float y);
+
+  [[nodiscard]] auto render_mode() const noexcept -> RenderMode
+  {
+    return render_mode_;
+  }
+
+  void set_render_mode(RenderMode render_mode) noexcept
+  {
+    render_mode_ = render_mode;
+  }
 
 private:
   void init_vk_device();

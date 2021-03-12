@@ -10,6 +10,7 @@
 
 #include <beyond/math/transform.hpp>
 
+#include "vulkan_helpers/graphics_pipeline.hpp"
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/vk_check.hpp"
 
@@ -20,7 +21,8 @@ void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
 {
   auto* app = beyond::bit_cast<App*>(glfwGetWindowUserPointer(window));
 
-  if (action == GLFW_REPEAT) {
+  switch (action) {
+  case GLFW_REPEAT:
     switch (key) {
     case GLFW_KEY_W:
       app->move_camera(FirstPersonCamera::Movement::FORWARD);
@@ -34,7 +36,29 @@ void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
     case GLFW_KEY_D:
       app->move_camera(FirstPersonCamera::Movement::RIGHT);
       break;
+    default:
+      break;
     }
+    break;
+  case GLFW_PRESS:
+    switch (key) {
+    case GLFW_KEY_Z: {
+      switch (app->render_mode()) {
+      case RenderMode::Fill:
+        app->set_render_mode(RenderMode::Wireframe);
+        break;
+      case RenderMode::Wireframe:
+        app->set_render_mode(RenderMode::Fill);
+        break;
+      }
+    }
+    default:
+      break;
+    }
+    break;
+
+  default:
+    break;
   }
 }
 
@@ -102,6 +126,8 @@ App::~App()
   vmaDestroyBuffer(context_.allocator(), terrain_mesh_.vertex_buffer_.buffer,
                    terrain_mesh_.vertex_buffer_.allocation);
 
+  vkDestroyPipeline(context_.device(), terrain_wireframe_graphics_pipeline_,
+                    nullptr);
   vkDestroyPipeline(context_.device(), terrain_graphics_pipeline_, nullptr);
   vkDestroyPipelineLayout(context_.device(), terrain_graphics_pipeline_layout_,
                           nullptr);
@@ -207,9 +233,10 @@ void App::init_swapchain()
       .requiredFlags =
           VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
   };
-  vmaCreateImage(context_.allocator(), &depth_image_create_info,
-                 &depth_image_allocation_create_info, &depth_image_.image,
-                 &depth_image_.allocation, nullptr);
+  VK_CHECK(vmaCreateImage(context_.allocator(), &depth_image_create_info,
+                          &depth_image_allocation_create_info,
+                          &depth_image_.image, &depth_image_.allocation,
+                          nullptr));
 
   const VkImageViewCreateInfo depth_view_create_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -224,8 +251,8 @@ void App::init_swapchain()
           .baseArrayLayer = 0,
           .layerCount = 1,
       }};
-  vkCreateImageView(context_.device(), &depth_view_create_info, nullptr,
-                    &depth_image_view_);
+  VK_CHECK(vkCreateImageView(context_.device(), &depth_view_create_info,
+                             nullptr, &depth_image_view_));
 }
 
 void App::init_command()
@@ -451,6 +478,16 @@ void App::init_descriptors()
 
 void App::init_pipeline()
 {
+  const VkPipelineLayoutCreateInfo pipeline_layout_info{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 1,
+      .pSetLayouts = &global_descriptor_set_layout_,
+      .pushConstantRangeCount = 0,
+  };
+
+  VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info,
+                                  nullptr, &terrain_graphics_pipeline_layout_));
+
   auto terrain_vert_ret =
       vkh::create_shader_module(context_.device(), "shaders/terrain.vert.spv");
   auto terrain_frag_ret =
@@ -458,7 +495,7 @@ void App::init_pipeline()
   auto terrain_vert_shader_module = terrain_vert_ret.value();
   auto terrain_frag_shader_module = terrain_frag_ret.value();
 
-  const VkPipelineShaderStageCreateInfo shader_stages[] = {
+  const VkPipelineShaderStageCreateInfo terrain_shader_stages[] = {
       {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
        .stage = VK_SHADER_STAGE_VERTEX_BIT,
        .module = terrain_vert_shader_module,
@@ -468,124 +505,53 @@ void App::init_pipeline()
        .module = terrain_frag_shader_module,
        .pName = "main"}};
 
-  static constexpr auto vertex_binding_description =
-      Vertex::binding_description();
-  static constexpr auto vertex_attribute_descriptions =
-      Vertex::attributes_descriptions();
-
-  static constexpr VkPipelineVertexInputStateCreateInfo vertex_input_info{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = 1,
-      .pVertexBindingDescriptions = &vertex_binding_description,
-      .vertexAttributeDescriptionCount =
-          static_cast<std::uint32_t>(vertex_attribute_descriptions.size()),
-      .pVertexAttributeDescriptions = vertex_attribute_descriptions.data()};
-
-  static constexpr VkPipelineInputAssemblyStateCreateInfo input_assembly{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitiveRestartEnable = VK_FALSE,
-  };
-
-  const VkViewport viewport{
-      .x = 0.0f,
-      .y = static_cast<float>(window_extent_.height),
-      .width = static_cast<float>(window_extent_.width),
-      .height = -static_cast<float>(window_extent_.height),
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
-  };
-
-  const VkRect2D scissor{.offset = {0, 0}, .extent = window_extent_};
-
-  const VkPipelineViewportStateCreateInfo viewport_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .pViewports = &viewport,
-      .scissorCount = 1,
-      .pScissors = &scissor,
-  };
-
-  static constexpr VkPipelineRasterizationStateCreateInfo rasterizer{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-      .depthClampEnable = VK_FALSE,
-      .rasterizerDiscardEnable = VK_FALSE,
-      .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_BACK_BIT,
-      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .depthBiasEnable = VK_FALSE,
-      .lineWidth = 1.0f,
-  };
-
-  static constexpr VkPipelineMultisampleStateCreateInfo multisampling{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-      .sampleShadingEnable = VK_FALSE,
-  };
-
-  static constexpr VkPipelineColorBlendAttachmentState color_blend_attachment{
-      .blendEnable = VK_FALSE,
-      .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-  };
-
-  static constexpr VkPipelineColorBlendStateCreateInfo color_blending{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .logicOpEnable = VK_FALSE,
-      .logicOp = VK_LOGIC_OP_COPY,
-      .attachmentCount = 1,
-      .pAttachments = &color_blend_attachment,
-      .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
-  };
-
-  const VkPipelineLayoutCreateInfo pipeline_layout_info{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 1,
-      .pSetLayouts = &global_descriptor_set_layout_,
-      .pushConstantRangeCount = 0,
-  };
-
-  if (vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
-                             &terrain_graphics_pipeline_layout_) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create pipeline layout!");
-  }
-
-  const VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .pNext = nullptr,
-      .depthTestEnable = VK_TRUE,
-      .depthWriteEnable = VK_TRUE,
-      .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-      .depthBoundsTestEnable = VK_FALSE,
-      .stencilTestEnable = VK_FALSE,
-      .minDepthBounds = 0.0f, // Optional
-      .maxDepthBounds = 1.0f, // Optional
-  };
-
-  const VkGraphicsPipelineCreateInfo pipeline_create_info{
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = beyond::size(shader_stages),
-      .pStages = beyond::to_pointer(shader_stages),
-      .pVertexInputState = &vertex_input_info,
-      .pInputAssemblyState = &input_assembly,
-      .pViewportState = &viewport_state,
-      .pRasterizationState = &rasterizer,
-      .pMultisampleState = &multisampling,
-      .pDepthStencilState = &depth_stencil_state,
-      .pColorBlendState = &color_blending,
-      .layout = terrain_graphics_pipeline_layout_,
-      .renderPass = render_pass_,
-      .subpass = 0,
-      .basePipelineHandle = VK_NULL_HANDLE,
-  };
-
-  VK_CHECK(vkCreateGraphicsPipelines(context_.device(), VK_NULL_HANDLE, 1,
-                                     &pipeline_create_info, nullptr,
-                                     &terrain_graphics_pipeline_));
+  terrain_graphics_pipeline_ =
+      vkh::create_graphics_pipeline(
+          context_.device(),
+          vkh::GraphicsPipelineCreateInfo{
+              .pipeline_layout = terrain_graphics_pipeline_layout_,
+              .render_pass = render_pass_,
+              .window_extend = window_extent_,
+              .shader_stages = terrain_shader_stages,
+              .cull_mode = vkh::CullMode::back,
+          })
+          .value();
 
   vkDestroyShaderModule(context_.device(), terrain_vert_shader_module, nullptr);
   vkDestroyShaderModule(context_.device(), terrain_frag_shader_module, nullptr);
+
+  auto wireframe_vert_ret = vkh::create_shader_module(
+      context_.device(), "shaders/wireframe.vert.spv");
+  auto wireframe_frag_ret = vkh::create_shader_module(
+      context_.device(), "shaders/wireframe.frag.spv");
+  auto wireframe_vert_shader_module = wireframe_vert_ret.value();
+  auto wireframe_frag_shader_module = wireframe_frag_ret.value();
+  const VkPipelineShaderStageCreateInfo wireframe_shader_stages[] = {
+      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+       .stage = VK_SHADER_STAGE_VERTEX_BIT,
+       .module = wireframe_vert_shader_module,
+       .pName = "main"},
+      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+       .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+       .module = wireframe_frag_shader_module,
+       .pName = "main"}};
+
+  terrain_wireframe_graphics_pipeline_ =
+      vkh::create_graphics_pipeline(
+          context_.device(),
+          vkh::GraphicsPipelineCreateInfo{
+              .pipeline_layout = terrain_graphics_pipeline_layout_,
+              .render_pass = render_pass_,
+              .window_extend = window_extent_,
+              .shader_stages = wireframe_shader_stages,
+              .polygon_mode = vkh::PolygonMode::line,
+          })
+          .value();
+
+  vkDestroyShaderModule(context_.device(), wireframe_vert_shader_module,
+                        nullptr);
+  vkDestroyShaderModule(context_.device(), wireframe_frag_shader_module,
+                        nullptr);
 }
 
 void App::render()
@@ -656,8 +622,17 @@ void App::render()
   vkCmdBeginRenderPass(cmd, &render_pass_begin_info,
                        VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    terrain_graphics_pipeline_);
+  switch (render_mode_) {
+  case RenderMode::Fill:
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      terrain_graphics_pipeline_);
+    break;
+  case RenderMode::Wireframe:
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      terrain_wireframe_graphics_pipeline_);
+    break;
+  };
+
   static constexpr VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &terrain_mesh_.vertex_buffer_.buffer,
                          &offset);
