@@ -19,6 +19,7 @@
 
 #include "vulkan_helpers/context.hpp"
 #include "vulkan_helpers/deletion_queue.hpp"
+#include "vulkan_helpers/vk_check.hpp"
 
 #include "first_person_camera.hpp"
 #include "marching_cubes.hpp"
@@ -32,7 +33,25 @@ struct GPUCameraData {
 struct AllocatedBuffer {
   VkBuffer buffer{};
   VmaAllocation allocation{};
+
+  template <typename T = void> auto map(vkh::Context& context) -> T*
+  {
+    void* ptr = nullptr;
+    VK_CHECK(vmaMapMemory(context.allocator(), allocation, &ptr));
+    return static_cast<T*>(ptr);
+  }
+
+  void unmap(vkh::Context& context)
+  {
+    vmaUnmapMemory(context.allocator(), allocation);
+  }
 };
+
+inline void destroy_allocated_buffer(vkh::Context& context,
+                                     AllocatedBuffer buffer)
+{
+  vmaDestroyBuffer(context.allocator(), buffer.buffer, buffer.allocation);
+}
 
 struct FrameData {
   VkSemaphore render_semaphore{};
@@ -145,7 +164,6 @@ public:
   }
 
 private:
-  void init_vk_device();
   void init_swapchain();
   void init_command();
   void init_render_pass();
@@ -162,7 +180,7 @@ private:
 
   [[nodiscard]] auto
   create_buffer_from_data(const BufferCreateInfo& buffer_create_info,
-                          void* data) -> AllocatedBuffer;
+                          const void* data) -> AllocatedBuffer;
 
   void render();
   void render_gui();

@@ -12,7 +12,6 @@
 
 #include "vulkan_helpers/graphics_pipeline.hpp"
 #include "vulkan_helpers/shader_module.hpp"
-#include "vulkan_helpers/vk_check.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -109,7 +108,6 @@ App::~App()
   if (!context_) { return; }
 
   context_.wait_idle();
-  deletion_queue_.flush();
 
   vkDestroyFence(context_.device(), upload_context_.fence, nullptr);
   vkDestroyCommandPool(context_.device(), upload_context_.command_pool,
@@ -117,8 +115,7 @@ App::~App()
 
   //  vmaDestroyBuffer(context_.allocator(), terrain_mesh_.index_buffer_.buffer,
   //                   terrain_mesh_.index_buffer_.allocation);
-  vmaDestroyBuffer(context_.allocator(), terrain_mesh_.vertex_buffer_.buffer,
-                   terrain_mesh_.vertex_buffer_.allocation);
+  destroy_allocated_buffer(context_, terrain_mesh_.vertex_buffer_);
 
   vkDestroyPipeline(context_.device(), terrain_wireframe_graphics_pipeline_,
                     nullptr);
@@ -129,9 +126,7 @@ App::~App()
   vkDestroyRenderPass(context_.device(), render_pass_, nullptr);
 
   for (auto& frame_data : frame_data_) {
-
-    vmaDestroyBuffer(context_.allocator(), frame_data.camera_buffer.buffer,
-                     frame_data.camera_buffer.allocation);
+    destroy_allocated_buffer(context_, frame_data.camera_buffer);
 
     vkDestroyFence(context_.device(), frame_data.render_fence, nullptr);
     vkDestroySemaphore(context_.device(), frame_data.render_semaphore, nullptr);
@@ -663,12 +658,9 @@ void App::render()
   };
 
   // and copy it to the buffer
-  void* data = nullptr;
-  vmaMapMemory(context_.allocator(),
-               current_frame_data.camera_buffer.allocation, &data);
+  void* data = current_frame_data.camera_buffer.map(context_);
   memcpy(data, &camera_data, sizeof(GPUCameraData));
-  vmaUnmapMemory(context_.allocator(),
-                 current_frame_data.camera_buffer.allocation);
+  current_frame_data.camera_buffer.unmap(context_);
 
   static constexpr std::uint64_t time_out = 1e9;
   VK_CHECK(vkWaitForFences(context_.device(), 1,
@@ -772,6 +764,33 @@ void App::render()
 
 void App::load_mesh()
 {
+  constexpr uint8_t input_data[] = {1, 2, 3, 4, 5, 6, 7, 8};
+  auto input_buffer = create_buffer_from_data(
+      BufferCreateInfo{
+          .size = beyond::size(input_data),
+          .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+      },
+      beyond::to_pointer(input_data));
+  auto output_buffer = create_buffer({BufferCreateInfo{
+      .size = beyond::size(input_data),
+      .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      .memory_usage = VMA_MEMORY_USAGE_GPU_TO_CPU,
+  }});
+
+  // TODO: Compute shader
+
+  const auto* output_ptr = output_buffer.map<uint8_t>(context_);
+  if (!std::equal(input_data, input_data + beyond::size(input_data),
+                  output_ptr)) {
+    fmt::print(stderr, "Compute shader does not work!\n");
+    std::fflush(stderr);
+  }
+  output_buffer.unmap(context_);
+
+  destroy_allocated_buffer(context_, input_buffer);
+  destroy_allocated_buffer(context_, output_buffer);
+
   terrain_mesh_.vertices_ = generate_chunk_mesh();
   upload_mesh(terrain_mesh_);
 }
@@ -819,13 +838,12 @@ auto App::create_buffer(const BufferCreateInfo& buffer_create_info)
 }
 
 auto App::create_buffer_from_data(const BufferCreateInfo& buffer_create_info,
-                                  void* data) -> AllocatedBuffer
+                                  const void* data) -> AllocatedBuffer
 {
   AllocatedBuffer buffer = create_buffer(buffer_create_info);
-  void* mapped_ptr = nullptr;
-  vmaMapMemory(context_.allocator(), buffer.allocation, &mapped_ptr);
+  void* mapped_ptr = buffer.map(context_);
   std::memcpy(mapped_ptr, data, buffer_create_info.size);
-  vmaUnmapMemory(context_.allocator(), buffer.allocation);
+  buffer.unmap(context_);
   return buffer;
 }
 
