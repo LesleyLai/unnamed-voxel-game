@@ -18,6 +18,7 @@
 #include "window_helpers/window_manager.hpp"
 
 #include "vulkan_helpers/context.hpp"
+#include "vulkan_helpers/deletion_queue.hpp"
 
 #include "first_person_camera.hpp"
 #include "marching_cubes.hpp"
@@ -80,6 +81,7 @@ class App {
   VkExtent2D window_extent_{};
 
   vkh::Context context_;
+  vkh::DeletionQueue deletion_queue_;
 
   VkSwapchainKHR swapchain_{};
   std::vector<VkImage> swapchain_images_{};
@@ -95,7 +97,6 @@ class App {
 
   VkDescriptorSetLayout global_descriptor_set_layout_{};
   VkDescriptorPool descriptor_pool_{};
-  VkDescriptorPool imgui_pool_{};
 
   std::uint32_t frame_number_ = 0;
   FrameData frame_data_[frames_in_flight]{};

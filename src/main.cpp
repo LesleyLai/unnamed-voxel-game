@@ -4,6 +4,8 @@
 
 auto main() -> int
 {
-  App app;
-  app.exec();
+  {
+    App app;
+    app.exec();
+  }
 }

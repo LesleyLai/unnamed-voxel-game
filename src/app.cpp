@@ -91,6 +91,7 @@ App::App() : window_manager_{&WindowManager::instance()}
   glfwSetMouseButtonCallback(window_.glfw_window(), mouse_button_callback);
 
   context_ = vkh::Context(window_);
+  deletion_queue_ = vkh::DeletionQueue(context_);
 
   init_swapchain();
   init_command();
@@ -108,6 +109,7 @@ App::~App()
   if (!context_) { return; }
 
   context_.wait_idle();
+  deletion_queue_.flush();
 
   vkDestroyFence(context_.device(), upload_context_.fence, nullptr);
   vkDestroyCommandPool(context_.device(), upload_context_.command_pool,
@@ -138,7 +140,6 @@ App::~App()
     vkDestroyCommandPool(context_.device(), frame_data.command_pool, nullptr);
   }
 
-  vkDestroyDescriptorPool(context_.device(), imgui_pool_, nullptr);
   ImGui_ImplVulkan_Shutdown();
 
   vkDestroyDescriptorPool(context_.device(), descriptor_pool_, nullptr);
@@ -434,8 +435,12 @@ void App::init_imgui()
       .pPoolSizes = beyond::to_pointer(pool_sizes),
   };
 
+  VkDescriptorPool imgui_pool{};
   VK_CHECK(vkCreateDescriptorPool(context_.device(), &pool_info, nullptr,
-                                  &imgui_pool_));
+                                  &imgui_pool));
+  deletion_queue_.push([=](VkDevice device) {
+    vkDestroyDescriptorPool(device, imgui_pool, nullptr);
+  });
 
   ImGui::CreateContext();
 
@@ -448,7 +453,7 @@ void App::init_imgui()
       .PhysicalDevice = context_.physical_device(),
       .Device = context_.device(),
       .Queue = context_.graphics_queue(),
-      .DescriptorPool = imgui_pool_,
+      .DescriptorPool = imgui_pool,
       .MinImageCount = 3,
       .ImageCount = 3,
   };
