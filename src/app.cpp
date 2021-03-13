@@ -548,12 +548,12 @@ void App::init_pipeline()
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info,
                                   nullptr, &terrain_graphics_pipeline_layout_));
 
-  auto terrain_vert_ret =
-      vkh::create_shader_module(context_.device(), "shaders/terrain.vert.spv");
-  auto terrain_frag_ret =
-      vkh::create_shader_module(context_.device(), "shaders/terrain.frag.spv");
-  auto terrain_vert_shader_module = terrain_vert_ret.value();
-  auto terrain_frag_shader_module = terrain_frag_ret.value();
+  auto terrain_vert_shader_module =
+      vkh::create_shader_module(context_.device(), "shaders/terrain.vert.spv")
+          .expect("Cannot load terrain.vert.spv");
+  auto terrain_frag_shader_module =
+      vkh::create_shader_module(context_.device(), "shaders/terrain.frag.spv")
+          .expect("Cannot load terrain.frag.spv");
 
   const VkPipelineShaderStageCreateInfo terrain_shader_stages[] = {
       {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -575,7 +575,7 @@ void App::init_pipeline()
               .shader_stages = terrain_shader_stages,
               .cull_mode = vkh::CullMode::back,
           })
-          .value();
+          .expect("Failed to create terrain graphics pipeline");
 
   vkDestroyShaderModule(context_.device(), terrain_vert_shader_module, nullptr);
   vkDestroyShaderModule(context_.device(), terrain_frag_shader_module, nullptr);
@@ -584,8 +584,10 @@ void App::init_pipeline()
       context_.device(), "shaders/wireframe.vert.spv");
   auto wireframe_frag_ret = vkh::create_shader_module(
       context_.device(), "shaders/wireframe.frag.spv");
-  auto wireframe_vert_shader_module = wireframe_vert_ret.value();
-  auto wireframe_frag_shader_module = wireframe_frag_ret.value();
+  auto wireframe_vert_shader_module =
+      wireframe_vert_ret.expect("Cannot load wireframe.vert.spv");
+  auto wireframe_frag_shader_module =
+      wireframe_frag_ret.expect("Cannot load wireframe.vert.spv");
   const VkPipelineShaderStageCreateInfo wireframe_shader_stages[] = {
       {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
        .stage = VK_SHADER_STAGE_VERTEX_BIT,
@@ -606,7 +608,7 @@ void App::init_pipeline()
               .shader_stages = wireframe_shader_stages,
               .polygon_mode = vkh::PolygonMode::line,
           })
-          .value();
+          .expect("Failed to create terrain wireframe graphics pipeline");
 
   vkDestroyShaderModule(context_.device(), wireframe_vert_shader_module,
                         nullptr);

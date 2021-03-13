@@ -1,5 +1,7 @@
 #include "marching_cubes.hpp"
 
+#include <cstdint>
+
 // clang-format off
 static constexpr std::uint16_t edge_table[256] = {
     0x0  , 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,

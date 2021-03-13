@@ -50,7 +50,7 @@ Context::Context(Window& window)
 
   vkb::PhysicalDeviceSelector phys_device_selector(instance_ret.value());
   auto phys_device_ret = phys_device_selector.set_surface(surface_)
-                             .set_required_features(VkPhysicalDeviceFeatures{
+                             .set_required_features({
                                  .fillModeNonSolid = true,
                              })
                              .select();
