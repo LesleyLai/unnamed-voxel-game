@@ -6,7 +6,6 @@ include("cmake/StandardProjectSettings.cmake")
 include("CMakeDependentOption")
 
 include("cmake/compiler.cmake")
-include("cmake/clangformat.cmake")
 include("cmake/StaticAnalyzers.cmake")
 
 include("cmake/conan.cmake")

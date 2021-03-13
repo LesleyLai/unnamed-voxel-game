@@ -7,6 +7,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <beyond/utils/bit_cast.hpp>
+
 namespace {
 
 auto create_surface_glfw(VkInstance instance, GLFWwindow* window)
@@ -36,6 +38,7 @@ Context::Context(Window& window)
                           .require_api_version(1, 2, 0)
                           .use_default_debug_messenger()
                           .request_validation_layers()
+                          .enable_extension("VK_EXT_debug_utils")
                           .build();
   if (!instance_ret) {
     fmt::print("{}\n", instance_ret.error().message());
@@ -74,7 +77,7 @@ Context::Context(Window& window)
       .instance = instance_,
   };
   VK_CHECK(vmaCreateAllocator(&allocator_create_info, &allocator_));
-}
+} // namespace vkh
 
 Context::~Context()
 {
