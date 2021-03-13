@@ -121,6 +121,10 @@ App::~App()
 
   context_.wait_idle();
 
+  vkDestroyFence(context_.device(), upload_context_.fence, nullptr);
+  vkDestroyCommandPool(context_.device(), upload_context_.command_pool,
+                       nullptr);
+
   //  vmaDestroyBuffer(context_.allocator(), terrain_mesh_.index_buffer_.buffer,
   //                   terrain_mesh_.index_buffer_.allocation);
   vmaDestroyBuffer(context_.allocator(), terrain_mesh_.vertex_buffer_.buffer,
@@ -279,6 +283,17 @@ void App::init_command()
                                       &command_buffer_allocate_info,
                                       &frame_data.main_command_buffer));
   }
+
+  const VkCommandPoolCreateInfo upload_command_pool_create_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex = context_.graphics_queue_family_index(),
+  };
+  // create pool for upload context
+  VK_CHECK(vkCreateCommandPool(context_.device(),
+                               &upload_command_pool_create_info, nullptr,
+                               &upload_context_.command_pool));
 }
 void App::init_render_pass()
 {
@@ -391,6 +406,9 @@ void App::init_sync_strucures()
       .pNext = nullptr,
       .flags = 0,
   };
+
+  VK_CHECK(vkCreateFence(context_.device(), &fence_create_info, nullptr,
+                         &upload_context_.fence));
 
   for (auto& frame_Data : frame_data_) {
     VK_CHECK(vkCreateSemaphore(context_.device(), &semaphore_create_info,
@@ -736,4 +754,50 @@ auto App::create_buffer_from_data(const BufferCreateInfo& buffer_create_info,
   std::memcpy(mapped_ptr, data, buffer_create_info.size);
   vmaUnmapMemory(context_.allocator(), buffer.allocation);
   return buffer;
+}
+
+void App::immediate_submit(
+    beyond::function_ref<void(VkCommandBuffer cmd)> function)
+{
+  const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .pNext = nullptr,
+      .commandPool = upload_context_.command_pool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+  };
+
+  VkCommandBuffer cmd = {};
+  VK_CHECK(vkAllocateCommandBuffers(context_.device(),
+                                    &command_buffer_allocate_info, &cmd));
+
+  static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .pNext = nullptr,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+      .pInheritanceInfo = nullptr,
+  };
+
+  VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
+
+  // execute the function
+  function(cmd);
+
+  VK_CHECK(vkEndCommandBuffer(cmd));
+
+  const VkSubmitInfo submit_info{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                                 .commandBufferCount = 1,
+                                 .pCommandBuffers = &cmd};
+
+  // submit command buffer to the queue and execute it.
+  // _uploadFence will now block until the graphic commands finish execution
+  VK_CHECK(vkQueueSubmit(context_.graphics_queue(), 1, &submit_info,
+                         upload_context_.fence));
+
+  vkWaitForFences(context_.device(), 1, &upload_context_.fence, true,
+                  9999999999);
+  vkResetFences(context_.device(), 1, &upload_context_.fence);
+
+  // clear the command pool. This will free the command buffer too
+  vkResetCommandPool(context_.device(), upload_context_.command_pool, 0);
 }

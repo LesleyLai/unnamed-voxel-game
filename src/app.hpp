@@ -12,6 +12,7 @@
 #include <beyond/math/matrix.hpp>
 #include <beyond/math/point.hpp>
 #include <beyond/math/vector.hpp>
+#include <beyond/utils/function_ref.hpp>
 
 #include "window_helpers/window.hpp"
 #include "window_helpers/window_manager.hpp"
@@ -67,6 +68,11 @@ enum class MouseDraggingState { No, Start, Dragging };
 
 enum class RenderMode { Fill, Wireframe };
 
+struct UploadContext {
+  VkFence fence = {};
+  VkCommandPool command_pool = {};
+};
+
 class App {
   WindowManager* window_manager_ = nullptr;
   Window window_;
@@ -104,6 +110,8 @@ class App {
   float last_mouse_x_{};
   float last_mouse_y_{};
   RenderMode render_mode_ = RenderMode::Fill;
+
+  UploadContext upload_context_;
 
 public:
   App();
@@ -156,6 +164,9 @@ private:
   void render();
   void load_mesh();
   void upload_mesh(Mesh& mesh);
+
+  void
+  immediate_submit(beyond::function_ref<void(VkCommandBuffer cmd)> function);
 };
 
 #endif // VOXEL_GAME_APP_HPP
