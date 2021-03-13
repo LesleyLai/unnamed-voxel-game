@@ -73,6 +73,13 @@ Context::Context(Window& window)
   graphics_queue_ = vkb_device.get_queue(vkb::QueueType::graphics).value();
   graphics_queue_family_index_ =
       vkb_device.get_queue_index(vkb::QueueType::graphics).value();
+  compute_queue_ = vkb_device.get_queue(vkb::QueueType::compute).value();
+  compute_queue_family_index_ =
+      vkb_device.get_queue_index(vkb::QueueType::compute).value();
+  transfer_queue_ = vkb_device.get_queue(vkb::QueueType::transfer).value();
+  transfer_queue_family_index_ =
+      vkb_device.get_queue_index(vkb::QueueType::transfer).value();
+
   present_queue_ = vkb_device.get_queue(vkb::QueueType::present).value();
 
   const VmaAllocatorCreateInfo allocator_create_info{
@@ -102,9 +109,15 @@ Context::Context(vkh::Context&& other) noexcept
       physical_device_{std::exchange(other.physical_device_, {})},
       device_{std::exchange(other.device_, {})},
       graphics_queue_{std::exchange(other.graphics_queue_, {})},
+      compute_queue_{std::exchange(other.compute_queue_, {})},
+      transfer_queue_{std::exchange(other.transfer_queue_, {})},
+      present_queue_{std::exchange(other.present_queue_, {})},
       graphics_queue_family_index_{
           std::exchange(other.graphics_queue_family_index_, {})},
-      present_queue_{std::exchange(other.present_queue_, {})},
+      compute_queue_family_index_{
+          std::exchange(other.compute_queue_family_index_, {})},
+      transfer_queue_family_index_{
+          std::exchange(other.transfer_queue_family_index_, {})},
       allocator_{std::exchange(other.allocator_, {})}
 {
 }
@@ -118,9 +131,16 @@ auto Context::operator=(Context&& other) & noexcept -> Context&
     physical_device_ = std::exchange(other.physical_device_, {});
     device_ = std::exchange(other.device_, {});
     graphics_queue_ = std::exchange(other.graphics_queue_, {});
+    compute_queue_ = std::exchange(other.compute_queue_, {});
+    transfer_queue_ = std::exchange(other.transfer_queue_, {});
+    present_queue_ = std::exchange(other.present_queue_, {});
     graphics_queue_family_index_ =
         std::exchange(other.graphics_queue_family_index_, {});
-    present_queue_ = std::exchange(other.present_queue_, {});
+    compute_queue_family_index_ =
+        std::exchange(other.compute_queue_family_index_, {});
+    transfer_queue_family_index_ =
+        std::exchange(other.transfer_queue_family_index_, {});
+
     allocator_ = std::exchange(other.allocator_, {});
   }
   return *this;

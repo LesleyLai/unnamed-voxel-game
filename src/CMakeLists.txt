@@ -21,6 +21,11 @@ compile_shader(wireframeFragShader
         TARGET ${CMAKE_BINARY_DIR}/bin/shaders/wireframe.frag.spv
         )
 
+compile_shader(terrainMeshingShader
+        SOURCE ${CMAKE_SOURCE_DIR}/shaders/terrain_meshing.comp.glsl
+        TARGET ${CMAKE_BINARY_DIR}/bin/shaders/terrain_meshing.comp.spv
+        )
+
 add_library(common
         app.hpp
         app.cpp
@@ -56,6 +61,7 @@ add_dependencies(common terrainVertShader)
 add_dependencies(common terrainFragShader)
 add_dependencies(common wireframeVertShader)
 add_dependencies(common wireframeFragShader)
+add_dependencies(common terrainMeshingShader)
 
 add_executable(app "main.cpp")
 target_link_libraries(app

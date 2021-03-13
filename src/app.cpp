@@ -100,7 +100,7 @@ App::App() : window_manager_{&WindowManager::instance()}
   init_imgui();
   init_descriptors();
   init_pipeline();
-  load_mesh();
+  generate_mesh();
 }
 
 App::~App()
@@ -382,13 +382,13 @@ void App::init_framebuffer()
 
 void App::init_sync_strucures()
 {
-  const VkSemaphoreCreateInfo semaphore_create_info{
+  static constexpr VkSemaphoreCreateInfo semaphore_create_info{
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
       .pNext = nullptr,
       .flags = 0,
   };
 
-  const VkFenceCreateInfo fence_create_info{
+  static constexpr VkFenceCreateInfo fence_create_info{
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
       .pNext = nullptr,
       .flags = 0,
@@ -762,32 +762,162 @@ void App::render()
   ++frame_number_;
 }
 
-void App::load_mesh()
+void App::generate_mesh()
 {
-  constexpr uint8_t input_data[] = {1, 2, 3, 4, 5, 6, 7, 8};
+  constexpr uint32_t input_data[] = {1, 2, 3, 4, 5, 6, 7, 8};
   auto input_buffer = create_buffer_from_data(
       BufferCreateInfo{
-          .size = beyond::size(input_data),
+          .size = beyond::byte_size(input_data),
           .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
           .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
       },
       beyond::to_pointer(input_data));
   auto output_buffer = create_buffer({BufferCreateInfo{
-      .size = beyond::size(input_data),
+      .size = beyond::byte_size(input_data),
       .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
       .memory_usage = VMA_MEMORY_USAGE_GPU_TO_CPU,
   }});
 
-  // TODO: Compute shader
+  static constexpr VkDescriptorSetLayoutBinding
+      descriptor_set_layout_bindings[2] = {
+          {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+           nullptr},
+          {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+           nullptr}};
 
-  const auto* output_ptr = output_buffer.map<uint8_t>(context_);
-  if (!std::equal(input_data, input_data + beyond::size(input_data),
+  static constexpr VkDescriptorSetLayoutCreateInfo
+      descriptorSetLayoutCreateInfo = {
+          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+          .bindingCount = beyond::size(descriptor_set_layout_bindings),
+          .pBindings = beyond::to_pointer(descriptor_set_layout_bindings)};
+
+  VkDescriptorSetLayout descriptor_set_layout{};
+  vkCreateDescriptorSetLayout(context_.device(), &descriptorSetLayoutCreateInfo,
+                              nullptr, &descriptor_set_layout);
+
+  const VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 1,
+      .pSetLayouts = &descriptor_set_layout,
+  };
+  VkPipelineLayout pipeline_layout{};
+  vkCreatePipelineLayout(context_.device(), &pipeline_layout_create_info,
+                         nullptr, &pipeline_layout);
+
+  VkShaderModule module =
+      vkh::create_shader_module(context_.device(),
+                                "shaders/terrain_meshing.comp.spv")
+          .expect("Cannot load terrain_meshing.comp.spv");
+
+  const VkComputePipelineCreateInfo compute_pipeline_create_info{
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage =
+          VkPipelineShaderStageCreateInfo{
+              .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+              .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+              .module = module,
+              .pName = "main",
+          },
+      .layout = pipeline_layout,
+  };
+  VkPipeline compute_pipeline = {};
+  vkCreateComputePipelines(context_.device(), {}, 1,
+                           &compute_pipeline_create_info, nullptr,
+                           &compute_pipeline);
+
+  const VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = descriptor_pool_,
+      .descriptorSetCount = 1,
+      .pSetLayouts = &descriptor_set_layout,
+  };
+  VkDescriptorSet descriptor_set = {};
+  vkAllocateDescriptorSets(context_.device(), &descriptor_set_allocate_info,
+                           &descriptor_set);
+
+  const VkDescriptorBufferInfo in_descriptor_buffer_info = {input_buffer.buffer,
+                                                            0, VK_WHOLE_SIZE};
+  const VkDescriptorBufferInfo out_descriptor_buffer_info = {
+      output_buffer.buffer, 0, VK_WHOLE_SIZE};
+
+  const VkWriteDescriptorSet write_descriptor_set[2] = {
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 0, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &in_descriptor_buffer_info,
+       nullptr},
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 1, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &out_descriptor_buffer_info,
+       nullptr}};
+  vkUpdateDescriptorSets(context_.device(), beyond::size(write_descriptor_set),
+                         beyond::to_pointer(write_descriptor_set), 0, nullptr);
+
+  const VkCommandPoolCreateInfo compute_command_pool_create_info{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .queueFamilyIndex = context_.compute_queue_family_index()};
+  VkCommandPool compute_command_pool = {};
+  vkCreateCommandPool(context_.device(), &compute_command_pool_create_info,
+                      nullptr, &compute_command_pool);
+
+  const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, 0, compute_command_pool,
+      VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
+
+  VkCommandBuffer command_buffer{};
+  VK_CHECK(vkAllocateCommandBuffers(
+      context_.device(), &command_buffer_allocate_info, &command_buffer));
+
+  static constexpr VkCommandBufferBeginInfo command_buffer_begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+
+  VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info));
+
+  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    compute_pipeline);
+  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          pipeline_layout, 0, 1, &descriptor_set, 0, 0);
+
+  vkCmdDispatch(command_buffer, beyond::size(input_data), 1, 1);
+  VK_CHECK(vkEndCommandBuffer(command_buffer));
+
+  const VkSubmitInfo submit_info{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &command_buffer,
+  };
+
+  static constexpr VkFenceCreateInfo fence_create_info{
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+  };
+  VkFence compute_fence = {};
+  vkCreateFence(context_.device(), &fence_create_info, nullptr, &compute_fence);
+
+  VK_CHECK(
+      vkQueueSubmit(context_.compute_queue(), 1, &submit_info, compute_fence));
+
+  vkWaitForFences(context_.device(), 1, &compute_fence, true, 9999999999);
+  vkResetFences(context_.device(), 1, &compute_fence);
+  vkResetCommandPool(context_.device(), compute_command_pool, 0);
+
+  vkDestroyFence(context_.device(), compute_fence, nullptr);
+  vkDestroyCommandPool(context_.device(), compute_command_pool, nullptr);
+  vkDestroyShaderModule(context_.device(), module, nullptr);
+  vkDestroyPipeline(context_.device(), compute_pipeline, nullptr);
+
+  const auto* output_ptr = output_buffer.map<uint32_t>(context_);
+  if (!std::equal(beyond::to_pointer(input_data),
+                  beyond::to_pointer(input_data) + beyond::size(input_data),
                   output_ptr)) {
     fmt::print(stderr, "Compute shader does not work!\n");
     std::fflush(stderr);
   }
   output_buffer.unmap(context_);
 
+  vkDestroyPipelineLayout(context_.device(), pipeline_layout, nullptr);
+  vkDestroyDescriptorSetLayout(context_.device(), descriptor_set_layout,
+                               nullptr);
   destroy_allocated_buffer(context_, input_buffer);
   destroy_allocated_buffer(context_, output_buffer);
 

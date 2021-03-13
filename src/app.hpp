@@ -184,7 +184,7 @@ private:
 
   void render();
   void render_gui();
-  void load_mesh();
+  void generate_mesh();
   void upload_mesh(Mesh& mesh);
 
   void

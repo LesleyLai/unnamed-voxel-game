@@ -19,8 +19,13 @@ class Context {
   VkPhysicalDevice physical_device_{};
   VkDevice device_{};
   VkQueue graphics_queue_{};
-  std::uint32_t graphics_queue_family_index_ = 0;
+  VkQueue compute_queue_{};
+  VkQueue transfer_queue_{};
   VkQueue present_queue_{};
+  std::uint32_t graphics_queue_family_index_ = 0;
+  std::uint32_t compute_queue_family_index_ = 0;
+  std::uint32_t transfer_queue_family_index_ = 0;
+
   VmaAllocator allocator_{};
 
 public:
@@ -70,15 +75,37 @@ public:
     return graphics_queue_;
   }
 
+  [[nodiscard]] BEYOND_FORCE_INLINE auto present_queue() noexcept -> VkQueue
+  {
+    return present_queue_;
+  }
+
+  [[nodiscard]] BEYOND_FORCE_INLINE auto compute_queue() noexcept -> VkQueue
+  {
+    return compute_queue_;
+  }
+
+  [[nodiscard]] BEYOND_FORCE_INLINE auto transfer_queue() noexcept -> VkQueue
+  {
+    return transfer_queue_;
+  }
+
   [[nodiscard]] BEYOND_FORCE_INLINE auto graphics_queue_family_index() noexcept
       -> std::uint32_t
   {
     return graphics_queue_family_index_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto present_queue() noexcept -> VkQueue
+  [[nodiscard]] BEYOND_FORCE_INLINE auto compute_queue_family_index() noexcept
+      -> std::uint32_t
   {
-    return present_queue_;
+    return compute_queue_family_index_;
+  }
+
+  [[nodiscard]] BEYOND_FORCE_INLINE auto transfer_queue_family_index() noexcept
+      -> std::uint32_t
+  {
+    return transfer_queue_family_index_;
   }
 
   [[nodiscard]] BEYOND_FORCE_INLINE auto allocator() noexcept -> VmaAllocator
