@@ -95,6 +95,7 @@ class App {
 
   VkDescriptorSetLayout global_descriptor_set_layout_{};
   VkDescriptorPool descriptor_pool_{};
+  VkDescriptorPool imgui_pool_{};
 
   std::uint32_t frame_number_ = 0;
   FrameData frame_data_[frames_in_flight]{};
@@ -149,6 +150,7 @@ private:
   void init_render_pass();
   void init_framebuffer();
   void init_sync_strucures();
+  void init_imgui();
   void init_descriptors();
   void init_pipeline();
 
@@ -162,6 +164,7 @@ private:
                           void* data) -> AllocatedBuffer;
 
   void render();
+  void render_gui();
   void load_mesh();
   void upload_mesh(Mesh& mesh);
 

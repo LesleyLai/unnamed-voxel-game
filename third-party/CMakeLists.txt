@@ -21,6 +21,10 @@ add_library(imgui
         "${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_widgets.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_glfw.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_vulkan.cpp")
+target_include_directories(imgui SYSTEM
+        PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/imgui"
+        )
 
 target_link_libraries(imgui CONAN_PKG::glfw)
 add_library(third_party::imgui ALIAS imgui)

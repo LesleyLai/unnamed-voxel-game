@@ -14,6 +14,10 @@
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/vk_check.hpp"
 
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
+
 namespace {
 
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
@@ -40,23 +44,6 @@ void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
       break;
     }
     break;
-  case GLFW_PRESS:
-    switch (key) {
-    case GLFW_KEY_Z: {
-      switch (app->render_mode()) {
-      case RenderMode::Fill:
-        app->set_render_mode(RenderMode::Wireframe);
-        break;
-      case RenderMode::Wireframe:
-        app->set_render_mode(RenderMode::Fill);
-        break;
-      }
-    }
-    default:
-      break;
-    }
-    break;
-
   default:
     break;
   }
@@ -110,6 +97,7 @@ App::App() : window_manager_{&WindowManager::instance()}
   init_render_pass();
   init_framebuffer();
   init_sync_strucures();
+  init_imgui();
   init_descriptors();
   init_pipeline();
   load_mesh();
@@ -149,6 +137,9 @@ App::~App()
                        nullptr);
     vkDestroyCommandPool(context_.device(), frame_data.command_pool, nullptr);
   }
+
+  vkDestroyDescriptorPool(context_.device(), imgui_pool_, nullptr);
+  ImGui_ImplVulkan_Shutdown();
 
   vkDestroyDescriptorPool(context_.device(), descriptor_pool_, nullptr);
   vkDestroyDescriptorSetLayout(context_.device(), global_descriptor_set_layout_,
@@ -420,6 +411,57 @@ void App::init_sync_strucures()
   }
 }
 
+void App::init_imgui()
+{
+  static constexpr VkDescriptorPoolSize pool_sizes[] = {
+      {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+      {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
+
+  static constexpr VkDescriptorPoolCreateInfo pool_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+      .maxSets = 1000,
+      .poolSizeCount = beyond::size(pool_sizes),
+      .pPoolSizes = beyond::to_pointer(pool_sizes),
+  };
+
+  VK_CHECK(vkCreateDescriptorPool(context_.device(), &pool_info, nullptr,
+                                  &imgui_pool_));
+
+  ImGui::CreateContext();
+
+  // this initializes imgui for SDL
+  ImGui_ImplGlfw_InitForVulkan(window_.glfw_window(), false);
+
+  // this initializes imgui for Vulkan
+  ImGui_ImplVulkan_InitInfo init_info = {
+      .Instance = context_.instance(),
+      .PhysicalDevice = context_.physical_device(),
+      .Device = context_.device(),
+      .Queue = context_.graphics_queue(),
+      .DescriptorPool = imgui_pool_,
+      .MinImageCount = 3,
+      .ImageCount = 3,
+  };
+  ImGui_ImplVulkan_Init(&init_info, render_pass_);
+
+  // execute a gpu command to upload imgui font textures
+  immediate_submit(
+      [&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
+
+  // clear font textures from cpu data
+  ImGui_ImplVulkan_DestroyFontUploadObjects();
+}
+
 void App::init_descriptors()
 {
   static constexpr VkDescriptorSetLayoutBinding camera_buffer_binding = {
@@ -572,8 +614,31 @@ void App::init_pipeline()
                         nullptr);
 }
 
+void App::render_gui()
+{
+  ImGui_ImplVulkan_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+
+  ImGui::Begin("Options");
+
+  ImGui::Text("Render Mode:");
+
+  int render_mode_int = static_cast<int>(render_mode_);
+  ImGui::RadioButton("Faces", &render_mode_int, 0);
+  ImGui::SameLine();
+  ImGui::RadioButton("Wireframe", &render_mode_int, 1);
+  render_mode_ = static_cast<RenderMode>(render_mode_int);
+
+  ImGui::End();
+
+  // imgui commands
+  ImGui::Render();
+}
+
 void App::render()
 {
+  render_gui();
   auto current_frame_data = get_current_frame();
 
   const float aspect_ratio = static_cast<float>(window_extent_.width) /
@@ -650,7 +715,6 @@ void App::render()
                       terrain_wireframe_graphics_pipeline_);
     break;
   };
-
   static constexpr VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &terrain_mesh_.vertex_buffer_.buffer,
                          &offset);
@@ -661,6 +725,8 @@ void App::render()
                           &current_frame_data.global_descriptor, 0, nullptr);
   vkCmdDraw(cmd, static_cast<std::uint32_t>(terrain_mesh_.vertices_.size()), 1,
             0, 0);
+
+  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
   vkCmdEndRenderPass(cmd);
   vkEndCommandBuffer(cmd);
