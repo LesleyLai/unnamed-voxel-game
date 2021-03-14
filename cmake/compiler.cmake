@@ -47,7 +47,7 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     endif ()
 endif ()
 
-option(VOXEL_GAME_ENABLE_PCH "Enable Precompiled Headers" OFF)
+option(VOXEL_GAME_ENABLE_PCH "Enable Precompiled Headers" ON)
 if (VOXEL_GAME_ENABLE_PCH)
     target_precompile_headers(compiler_options INTERFACE
             <algorithm>
@@ -62,6 +62,7 @@ if (VOXEL_GAME_ENABLE_PCH)
             <cmath>
             <cstddef>
             <type_traits>
+            <fmt/format.h>
             )
 endif ()
 

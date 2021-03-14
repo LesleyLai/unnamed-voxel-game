@@ -4,7 +4,6 @@
 #include <fmt/format.h>
 
 #include <beyond/utils/byte_size.hpp>
-#include <beyond/utils/panic.hpp>
 #include <beyond/utils/size.hpp>
 #include <beyond/utils/to_pointer.hpp>
 
@@ -858,8 +857,8 @@ void App::generate_mesh()
                       nullptr, &compute_command_pool);
 
   const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
-      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, 0, compute_command_pool,
-      VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
+      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr,
+      compute_command_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
 
   VkCommandBuffer command_buffer{};
   VK_CHECK(vkAllocateCommandBuffers(

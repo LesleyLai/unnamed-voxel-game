@@ -12,6 +12,11 @@ target_include_directories(vma SYSTEM
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/VulkanMemoryAllocator/src>
         )
 add_library(third_party::vma ALIAS vma)
+if (VOXEL_GAME_ENABLE_PCH)
+    target_precompile_headers(vma INTERFACE
+            "${CMAKE_CURRENT_SOURCE_DIR}/VulkanMemoryAllocator/src/vk_mem_alloc.h"
+            )
+endif ()
 
 # Imgui
 add_library(imgui
@@ -25,6 +30,13 @@ target_include_directories(imgui SYSTEM
         PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/imgui"
         )
+if (VOXEL_GAME_ENABLE_PCH)
+    target_precompile_headers(vma INTERFACE
+            "${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_glfw.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_impl_vulkan.h"
+            )
+endif ()
 
 target_link_libraries(imgui CONAN_PKG::glfw)
 add_library(third_party::imgui ALIAS imgui)

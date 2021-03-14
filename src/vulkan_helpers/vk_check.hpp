@@ -1,6 +1,8 @@
 #ifndef VOXEL_GAME_VULKAN_VK_CHECK_HPP
 #define VOXEL_GAME_VULKAN_VK_CHECK_HPP
 
+#include <fmt/format.h>
+
 #define VK_CHECK(x)                                                            \
   do {                                                                         \
     VkResult err = x;                                                          \
