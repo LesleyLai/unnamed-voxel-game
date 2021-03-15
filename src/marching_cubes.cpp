@@ -1,5 +1,7 @@
 #include "marching_cubes.hpp"
 
+#include <beyond/math/point.hpp>
+
 #include <cstdint>
 
 // clang-format off
@@ -379,9 +381,12 @@ void polygonise(GridCell cell, float isolevel, std::vector<Vertex>& positions)
 
     const auto normal = beyond::normalize(beyond::cross(edge0, edge1));
 
-    positions.push_back(Vertex{.position = p0, .normal = normal});
-    positions.push_back(Vertex{.position = p1, .normal = normal});
-    positions.push_back(Vertex{.position = p2, .normal = normal});
+    positions.push_back(Vertex{.position = beyond::Vec4{p0, 1},
+                               .normal = beyond::Vec4{normal, 0}});
+    positions.push_back(Vertex{.position = beyond::Vec4{p0, 1},
+                               .normal = beyond::Vec4{normal, 0}});
+    positions.push_back(Vertex{.position = beyond::Vec4{p0, 1},
+                               .normal = beyond::Vec4{normal, 0}});
   }
 }
 

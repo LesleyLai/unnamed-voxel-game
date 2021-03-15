@@ -82,8 +82,7 @@ struct AllocatedImage {
   VmaAllocation allocation{};
 };
 
-struct Mesh {
-  std::vector<Vertex> vertices_;
+struct TerrainChunkVertexCache {
   AllocatedBuffer vertex_buffer_;
 };
 
@@ -127,7 +126,7 @@ class App {
   VkPipeline terrain_graphics_pipeline_{};
   VkPipeline terrain_wireframe_pipeline_{};
 
-  Mesh terrain_mesh_{};
+  TerrainChunkVertexCache terrain_mesh_{};
   AllocatedBuffer indirect_buffer_{};
 
   FirstPersonCamera camera_{beyond::Vec3(0.0f, 0.0f, 5.0f)};
@@ -189,7 +188,6 @@ private:
   void render();
   void render_gui();
   void generate_mesh();
-  void upload_mesh(Mesh& mesh);
 
   void
   immediate_submit(beyond::function_ref<void(VkCommandBuffer cmd)> function);

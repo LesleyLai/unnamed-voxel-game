@@ -1,7 +1,7 @@
 #version 450
 
-const int size = 8;
-layout(local_size_x_id = 0, local_size_y_id = 1) in;
+const int chunk_size = 16;
+layout (local_size_x = chunk_size, local_size_y = chunk_size) in;
 
 layout(binding = 0) buffer indirect_buffer
 {
@@ -16,18 +16,26 @@ layout(binding = 1) buffer in_buffer
     uint indata[];
 };
 
-layout(binding = 2) buffer out_buffer
-{
-    uint outdata[];
+struct Vertex {
+    vec4 position;// 4th dimension corrently unused
+    vec4 normal;// 4th dimension corrently unused
 };
 
-void main(){
-    indirect.vertexCount = 312;
-    indirect.instanceCount = 1;
-    indirect.firstVertex = 0;
-    indirect.firstInstance = 0;
+layout(binding = 2) buffer out_buffer
+{
+    Vertex vertices[];
+};
 
-    for (int i = 0; i < size; ++i) {
-        outdata[i] = indata[i];
+const Vertex[] const_vertices = Vertex[](
+Vertex(vec4(-0.5, -0.5, 0.0, 0.0), vec4(-0.5, -0.5, 0.0, 0.0)),
+Vertex(vec4(0.5, -0.5, 0.0, 0.0), vec4(-0.5, -0.5, 0.0, 0.0)),
+Vertex(vec4(0.0, 0.5, 0.0, 0.0), vec4(-0.5, -0.5, 0.0, 0.0))
+);
+
+void main(){
+    if (gl_GlobalInvocationID.x < 3 && gl_GlobalInvocationID.y == 0 && gl_GlobalInvocationID.z == 0) {
+        vertices[gl_GlobalInvocationID.x] = const_vertices[gl_GlobalInvocationID.x];
     }
+
+    atomicAdd(indirect.vertexCount, 1);
 }

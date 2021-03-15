@@ -18,6 +18,8 @@
 
 namespace {
 
+static constexpr int chunk_dimension = 16;
+
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
                   int /*mods*/)
 {
@@ -760,11 +762,26 @@ void App::render()
 
 void App::generate_mesh()
 {
-  indirect_buffer_ = create_buffer({
-      .size = sizeof(VkDrawIndirectCommand),
-      .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+  static constexpr VkDrawIndirectCommand indirect_command{
+      .vertexCount = 0,
+      .instanceCount = 1,
+      .firstVertex = 0,
+      .firstInstance = 0,
+  };
+  indirect_buffer_ = create_buffer_from_data(
+      {
+          .size = sizeof(VkDrawIndirectCommand),
+          .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+      },
+      static_cast<const void*>(&indirect_command));
+  terrain_mesh_.vertex_buffer_ = create_buffer({
+      .size = sizeof(Vertex) * 5 * 3 * chunk_dimension * chunk_dimension *
+              chunk_dimension,
+      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-      .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+      .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
   });
 
   constexpr uint32_t input_data[] = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -775,11 +792,6 @@ void App::generate_mesh()
           .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
       },
       beyond::to_pointer(input_data));
-  auto output_buffer = create_buffer({BufferCreateInfo{
-      .size = beyond::byte_size(input_data),
-      .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-      .memory_usage = VMA_MEMORY_USAGE_GPU_TO_CPU,
-  }});
 
   static constexpr VkDescriptorSetLayoutBinding
       descriptor_set_layout_bindings[] = {
@@ -844,8 +856,8 @@ void App::generate_mesh()
       indirect_buffer_, 0, VK_WHOLE_SIZE};
   const VkDescriptorBufferInfo in_descriptor_buffer_info = {input_buffer, 0,
                                                             VK_WHOLE_SIZE};
-  const VkDescriptorBufferInfo out_descriptor_buffer_info = {output_buffer, 0,
-                                                             VK_WHOLE_SIZE};
+  const VkDescriptorBufferInfo out_descriptor_buffer_info = {
+      terrain_mesh_.vertex_buffer_, 0, VK_WHOLE_SIZE};
 
   const VkWriteDescriptorSet write_descriptor_set[] = {
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 0, 0, 1,
@@ -887,7 +899,7 @@ void App::generate_mesh()
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                           pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
 
-  vkCmdDispatch(command_buffer, beyond::size(input_data), 1, 1);
+  vkCmdDispatch(command_buffer, 1, 1, chunk_dimension);
   VK_CHECK(vkEndCommandBuffer(command_buffer));
 
   const VkSubmitInfo submit_info{
@@ -916,35 +928,10 @@ void App::generate_mesh()
   vkDestroyShaderModule(context_.device(), module, nullptr);
   vkDestroyPipeline(context_.device(), compute_pipeline, nullptr);
 
-  const auto* output_ptr = output_buffer.map<uint32_t>(context_);
-  if (!std::equal(beyond::to_pointer(input_data),
-                  beyond::to_pointer(input_data) + beyond::size(input_data),
-                  output_ptr)) {
-    fmt::print(stderr, "Compute shader does not work!\n");
-    std::fflush(stderr);
-  }
-  output_buffer.unmap(context_);
-
   vkDestroyPipelineLayout(context_.device(), pipeline_layout, nullptr);
   vkDestroyDescriptorSetLayout(context_.device(), descriptor_set_layout,
                                nullptr);
   destroy_allocated_buffer(context_, input_buffer);
-  destroy_allocated_buffer(context_, output_buffer);
-
-  terrain_mesh_.vertices_ = generate_chunk_mesh();
-
-  upload_mesh(terrain_mesh_);
-}
-
-void App::upload_mesh(Mesh& mesh)
-{
-  mesh.vertex_buffer_ = create_buffer_from_data(
-      BufferCreateInfo{
-          .size = beyond::byte_size(mesh.vertices_),
-          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-      },
-      mesh.vertices_.data());
 }
 
 auto App::get_current_frame() -> FrameData&
