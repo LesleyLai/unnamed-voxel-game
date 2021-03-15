@@ -22,7 +22,7 @@
 #include "vulkan_helpers/vk_check.hpp"
 
 #include "first_person_camera.hpp"
-#include "marching_cubes.hpp"
+#include "vertex.hpp"
 
 struct GPUCameraData {
   beyond::Mat4 view;

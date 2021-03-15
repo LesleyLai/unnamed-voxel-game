@@ -38,6 +38,8 @@ Context::Context(Window& window)
                           .require_api_version(1, 2, 0)
                           .use_default_debug_messenger()
                           .request_validation_layers()
+                          .add_validation_feature_enable(
+                              VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT)
                           .enable_extension("VK_EXT_debug_utils")
                           .build();
   if (!instance_ret) {
@@ -50,6 +52,8 @@ Context::Context(Window& window)
 
   vkb::PhysicalDeviceSelector phys_device_selector(instance_ret.value());
   auto phys_device_ret = phys_device_selector.set_surface(surface_)
+                             .add_required_extension(
+                                 VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
                              .set_required_features({
                                  .fillModeNonSolid = true,
                              })

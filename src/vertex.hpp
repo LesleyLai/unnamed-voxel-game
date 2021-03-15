@@ -1,11 +1,11 @@
-#ifndef VOXEL_GAME_MARCHING_CUBES_HPP
-#define VOXEL_GAME_MARCHING_CUBES_HPP
+#ifndef VOXEL_GAME_VERTEX_HPP
+#define VOXEL_GAME_VERTEX_HPP
 
 #include <vulkan/vulkan.h>
 
 #include <beyond/math/vector.hpp>
 
-#include <vector>
+#include <array>
 
 struct Vertex {
   beyond::Vec4 position;
@@ -34,6 +34,4 @@ struct Vertex {
   }
 };
 
-[[nodiscard]] auto generate_chunk_mesh() -> std::vector<Vertex>;
-
-#endif // VOXEL_GAME_MARCHING_CUBES_HPP
+#endif // VOXEL_GAME_VERTEX_HPP

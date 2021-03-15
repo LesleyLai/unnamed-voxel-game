@@ -33,8 +33,7 @@ add_library(common
         vulkan_helpers/shader_module.cpp
         vulkan_helpers/vma_impl.cpp
         first_person_camera.hpp
-        marching_cubes.hpp
-        marching_cubes.cpp
+        vertex.hpp
         window_helpers/window_manager.cpp
         window_helpers/window_manager.hpp
         window_helpers/window.cpp

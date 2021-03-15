@@ -7,7 +7,7 @@
 #include "debug_utils.hpp"
 #include "vk_check.hpp"
 
-#include "../marching_cubes.hpp"
+#include "../vertex.hpp"
 
 namespace vkh {
 
