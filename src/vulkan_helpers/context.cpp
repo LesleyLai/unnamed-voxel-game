@@ -82,6 +82,12 @@ Context::Context(Window& window)
 
   present_queue_ = vkb_device.get_queue(vkb::QueueType::present).value();
 
+  functions_ = {
+      .setDebugUtilsObjectNameEXT =
+          beyond::bit_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+              vkGetDeviceProcAddr(device_, "vkSetDebugUtilsObjectNameEXT")),
+  };
+
   const VmaAllocatorCreateInfo allocator_create_info{
       .physicalDevice = physical_device_,
       .device = device_,
@@ -118,6 +124,7 @@ Context::Context(vkh::Context&& other) noexcept
           std::exchange(other.compute_queue_family_index_, {})},
       transfer_queue_family_index_{
           std::exchange(other.transfer_queue_family_index_, {})},
+      functions_{std::exchange(other.functions_, {})},
       allocator_{std::exchange(other.allocator_, {})}
 {
 }
@@ -140,7 +147,7 @@ auto Context::operator=(Context&& other) & noexcept -> Context&
         std::exchange(other.compute_queue_family_index_, {});
     transfer_queue_family_index_ =
         std::exchange(other.transfer_queue_family_index_, {});
-
+    functions_ = std::exchange(other.functions_, {});
     allocator_ = std::exchange(other.allocator_, {});
   }
   return *this;

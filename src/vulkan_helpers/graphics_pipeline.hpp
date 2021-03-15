@@ -6,8 +6,11 @@
 #include <vulkan/vulkan.h>
 
 #include <span>
+#include <string>
 
 namespace vkh {
+
+class Context;
 
 template <class T> using Expected = beyond::expected<T, VkResult>;
 
@@ -25,9 +28,12 @@ enum class CullMode {
 };
 
 struct GraphicsPipelineCreateInfo {
-  VkPipelineLayout pipeline_layout{};
-  VkRenderPass render_pass{};
-  VkExtent2D window_extend{};
+  // Required
+  VkPipelineLayout pipeline_layout = {};
+  VkRenderPass render_pass = {};
+  VkExtent2D window_extend = {};
+
+  // Optional
   std::span<const VkPipelineShaderStageCreateInfo> shader_stages;
   PolygonMode polygon_mode = PolygonMode::fill;
   CullMode cull_mode = CullMode::none;
@@ -37,6 +43,9 @@ struct GraphicsPipelineCreateInfo {
 create_graphics_pipeline(VkDevice device,
                          const GraphicsPipelineCreateInfo& create_info)
     -> Expected<VkPipeline>;
+
+[[nodiscard]] auto set_debug_name(Context& context, VkPipeline pipeline,
+                                  const char* name) noexcept -> VkResult;
 
 } // namespace vkh
 

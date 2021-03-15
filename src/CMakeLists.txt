@@ -43,7 +43,7 @@ add_library(common
         vulkan_helpers/context.hpp
         vulkan_helpers/vk_check.hpp
         vulkan_helpers/graphics_pipeline.cpp
-        vulkan_helpers/graphics_pipeline.hpp vulkan_helpers/deletion_queue.hpp)
+        vulkan_helpers/graphics_pipeline.hpp vulkan_helpers/deletion_queue.hpp vulkan_helpers/debug_utils.cpp vulkan_helpers/debug_utils.hpp)
 target_link_libraries(common
         PUBLIC
         CONAN_PKG::fmt

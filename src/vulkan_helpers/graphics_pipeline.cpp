@@ -3,6 +3,10 @@
 #include <beyond/utils/size.hpp>
 #include <beyond/utils/to_pointer.hpp>
 
+#include "context.hpp"
+#include "debug_utils.hpp"
+#include "vk_check.hpp"
+
 #include "../marching_cubes.hpp"
 
 namespace vkh {
@@ -119,11 +123,16 @@ create_graphics_pipeline(VkDevice device,
   const auto result = vkCreateGraphicsPipelines(
       device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline);
 
-  if (result == VK_SUCCESS) {
-    return pipeline;
-  } else {
-    return beyond::unexpected{result};
-  }
+  if (result != VK_SUCCESS) { return beyond::unexpected{result}; }
+
+  return pipeline;
+}
+
+[[nodiscard]] auto set_debug_name(Context& context, VkPipeline pipeline,
+                                  const char* name) noexcept -> VkResult
+{
+  return set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline),
+                        VK_OBJECT_TYPE_PIPELINE, name);
 }
 
 } // namespace vkh

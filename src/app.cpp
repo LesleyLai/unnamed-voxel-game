@@ -116,8 +116,7 @@ App::~App()
   //                   terrain_mesh_.index_buffer_.allocation);
   destroy_allocated_buffer(context_, terrain_mesh_.vertex_buffer_);
 
-  vkDestroyPipeline(context_.device(), terrain_wireframe_graphics_pipeline_,
-                    nullptr);
+  vkDestroyPipeline(context_.device(), terrain_wireframe_pipeline_, nullptr);
   vkDestroyPipeline(context_.device(), terrain_graphics_pipeline_, nullptr);
   vkDestroyPipelineLayout(context_.device(), terrain_graphics_pipeline_layout_,
                           nullptr);
@@ -572,9 +571,10 @@ void App::init_pipeline()
               .render_pass = render_pass_,
               .window_extend = window_extent_,
               .shader_stages = terrain_shader_stages,
-              .cull_mode = vkh::CullMode::back,
-          })
+              .cull_mode = vkh::CullMode::back})
           .expect("Failed to create terrain graphics pipeline");
+  VK_CHECK(vkh::set_debug_name(context_, terrain_graphics_pipeline_,
+                               "Terrain Graphics Pipeline"));
 
   vkDestroyShaderModule(context_.device(), terrain_vert_shader_module, nullptr);
   vkDestroyShaderModule(context_.device(), terrain_frag_shader_module, nullptr);
@@ -597,7 +597,7 @@ void App::init_pipeline()
        .module = wireframe_frag_shader_module,
        .pName = "main"}};
 
-  terrain_wireframe_graphics_pipeline_ =
+  terrain_wireframe_pipeline_ =
       vkh::create_graphics_pipeline(
           context_.device(),
           vkh::GraphicsPipelineCreateInfo{
@@ -605,9 +605,10 @@ void App::init_pipeline()
               .render_pass = render_pass_,
               .window_extend = window_extent_,
               .shader_stages = wireframe_shader_stages,
-              .polygon_mode = vkh::PolygonMode::line,
-          })
+              .polygon_mode = vkh::PolygonMode::line})
           .expect("Failed to create terrain wireframe graphics pipeline");
+  VK_CHECK(vkh::set_debug_name(context_, terrain_wireframe_pipeline_,
+                               "Terrain Wireframe Pipeline"));
 
   vkDestroyShaderModule(context_.device(), wireframe_vert_shader_module,
                         nullptr);
@@ -710,7 +711,7 @@ void App::render()
     break;
   case RenderMode::Wireframe:
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      terrain_wireframe_graphics_pipeline_);
+                      terrain_wireframe_pipeline_);
     break;
   };
   static constexpr VkDeviceSize offset = 0;

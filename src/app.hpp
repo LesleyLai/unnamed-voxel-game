@@ -122,7 +122,7 @@ class App {
 
   VkPipelineLayout terrain_graphics_pipeline_layout_{};
   VkPipeline terrain_graphics_pipeline_{};
-  VkPipeline terrain_wireframe_graphics_pipeline_{};
+  VkPipeline terrain_wireframe_pipeline_{};
 
   Mesh terrain_mesh_{};
 

@@ -12,6 +12,10 @@
 
 namespace vkh {
 
+struct VulkanFunctions {
+  PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT = nullptr;
+};
+
 class Context {
   VkInstance instance_{};
   VkDebugUtilsMessengerEXT debug_messenger_{};
@@ -26,6 +30,7 @@ class Context {
   std::uint32_t compute_queue_family_index_ = 0;
   std::uint32_t transfer_queue_family_index_ = 0;
 
+  VulkanFunctions functions_{};
   VmaAllocator allocator_{};
 
 public:
@@ -111,6 +116,12 @@ public:
   [[nodiscard]] BEYOND_FORCE_INLINE auto allocator() noexcept -> VmaAllocator
   {
     return allocator_;
+  }
+
+  [[nodiscard]] BEYOND_FORCE_INLINE auto functions() const noexcept
+      -> VulkanFunctions
+  {
+    return functions_;
   }
 
   BEYOND_FORCE_INLINE explicit operator bool()
