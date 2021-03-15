@@ -34,6 +34,11 @@ struct AllocatedBuffer {
   VkBuffer buffer{};
   VmaAllocation allocation{};
 
+  explicit(false) operator VkBuffer()
+  {
+    return buffer;
+  }
+
   template <typename T = void> auto map(vkh::Context& context) -> T*
   {
     void* ptr = nullptr;
@@ -79,9 +84,7 @@ struct AllocatedImage {
 
 struct Mesh {
   std::vector<Vertex> vertices_;
-  std::vector<std::uint32_t> indices_;
   AllocatedBuffer vertex_buffer_;
-  AllocatedBuffer index_buffer_;
 };
 
 enum class MouseDraggingState { No, Start, Dragging };
@@ -125,6 +128,7 @@ class App {
   VkPipeline terrain_wireframe_pipeline_{};
 
   Mesh terrain_mesh_{};
+  AllocatedBuffer indirect_buffer_{};
 
   FirstPersonCamera camera_{beyond::Vec3(0.0f, 0.0f, 5.0f)};
   MouseDraggingState dragging_ = MouseDraggingState::No;

@@ -112,8 +112,7 @@ App::~App()
   vkDestroyCommandPool(context_.device(), upload_context_.command_pool,
                        nullptr);
 
-  //  vmaDestroyBuffer(context_.allocator(), terrain_mesh_.index_buffer_.buffer,
-  //                   terrain_mesh_.index_buffer_.allocation);
+  destroy_allocated_buffer(context_, indirect_buffer_);
   destroy_allocated_buffer(context_, terrain_mesh_.vertex_buffer_);
 
   vkDestroyPipeline(context_.device(), terrain_wireframe_pipeline_, nullptr);
@@ -717,13 +716,10 @@ void App::render()
   static constexpr VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &terrain_mesh_.vertex_buffer_.buffer,
                          &offset);
-  //  vkCmdBindIndexBuffer(cmd, terrain_mesh_.index_buffer_.buffer, offset,
-  //                       VK_INDEX_TYPE_UINT32);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           terrain_graphics_pipeline_layout_, 0, 1,
                           &current_frame_data.global_descriptor, 0, nullptr);
-  vkCmdDraw(cmd, static_cast<std::uint32_t>(terrain_mesh_.vertices_.size()), 1,
-            0, 0);
+  vkCmdDrawIndirect(cmd, indirect_buffer_, 0, 1, 0);
 
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
@@ -764,6 +760,13 @@ void App::render()
 
 void App::generate_mesh()
 {
+  indirect_buffer_ = create_buffer({
+      .size = sizeof(VkDrawIndirectCommand),
+      .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  });
+
   constexpr uint32_t input_data[] = {1, 2, 3, 4, 5, 6, 7, 8};
   auto input_buffer = create_buffer_from_data(
       BufferCreateInfo{
@@ -779,10 +782,12 @@ void App::generate_mesh()
   }});
 
   static constexpr VkDescriptorSetLayoutBinding
-      descriptor_set_layout_bindings[2] = {
+      descriptor_set_layout_bindings[] = {
           {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
            nullptr},
           {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
+           nullptr},
+          {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
            nullptr}};
 
   static constexpr VkDescriptorSetLayoutCreateInfo
@@ -835,16 +840,21 @@ void App::generate_mesh()
   vkAllocateDescriptorSets(context_.device(), &descriptor_set_allocate_info,
                            &descriptor_set);
 
-  const VkDescriptorBufferInfo in_descriptor_buffer_info = {input_buffer.buffer,
-                                                            0, VK_WHOLE_SIZE};
-  const VkDescriptorBufferInfo out_descriptor_buffer_info = {
-      output_buffer.buffer, 0, VK_WHOLE_SIZE};
+  const VkDescriptorBufferInfo indirect_descriptor_buffer_info = {
+      indirect_buffer_, 0, VK_WHOLE_SIZE};
+  const VkDescriptorBufferInfo in_descriptor_buffer_info = {input_buffer, 0,
+                                                            VK_WHOLE_SIZE};
+  const VkDescriptorBufferInfo out_descriptor_buffer_info = {output_buffer, 0,
+                                                             VK_WHOLE_SIZE};
 
-  const VkWriteDescriptorSet write_descriptor_set[2] = {
+  const VkWriteDescriptorSet write_descriptor_set[] = {
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 0, 0, 1,
+       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr,
+       &indirect_descriptor_buffer_info, nullptr},
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 1, 0, 1,
        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &in_descriptor_buffer_info,
        nullptr},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 1, 0, 1,
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 2, 0, 1,
        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &out_descriptor_buffer_info,
        nullptr}};
   vkUpdateDescriptorSets(context_.device(), beyond::size(write_descriptor_set),
@@ -875,7 +885,7 @@ void App::generate_mesh()
   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                     compute_pipeline);
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                          pipeline_layout, 0, 1, &descriptor_set, 0, 0);
+                          pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
 
   vkCmdDispatch(command_buffer, beyond::size(input_data), 1, 1);
   VK_CHECK(vkEndCommandBuffer(command_buffer));
@@ -922,6 +932,7 @@ void App::generate_mesh()
   destroy_allocated_buffer(context_, output_buffer);
 
   terrain_mesh_.vertices_ = generate_chunk_mesh();
+
   upload_mesh(terrain_mesh_);
 }
 
@@ -934,14 +945,6 @@ void App::upload_mesh(Mesh& mesh)
           .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
       },
       mesh.vertices_.data());
-
-  //  mesh.index_buffer_ = create_buffer_from_data(
-  //      BufferCreateInfo{
-  //          .size = beyond::byte_size(mesh.indices_),
-  //          .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-  //          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-  //      },
-  //      mesh.indices_.data());
 }
 
 auto App::get_current_frame() -> FrameData&
