@@ -7,7 +7,7 @@ layout (location = 0) in VS_OUT {
 
 layout (location = 0) out vec4 outColor;
 
-const vec3 lightPos = vec3(10.0, 0.0, 0.0);
+const vec3 lightPos = vec3(0.0, 20.0, 0.0);
 
 void main()
 {

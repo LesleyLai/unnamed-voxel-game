@@ -2,9 +2,9 @@
 #extension GL_EXT_debug_printf : require
 #extension GL_EXT_scalar_block_layout : require
 
-const int chunk_dimension = 16;
+const int chunk_dimension = 32;
 const int half_chunk_dimension = chunk_dimension / 2;
-layout (local_size_x = chunk_dimension, local_size_y = chunk_dimension, local_size_z = 1) in;
+layout (local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
 layout(binding = 0) buffer indirect_buffer
 {
@@ -60,9 +60,41 @@ const vec3 corner_offsets[8] =
     vec3(-0.5f, 0.5f, 0.5f)
   );
 
-float noise(vec3 pt) {
-  return sin(pt.x) + sin(pt.y) + sin(pt.z);
+float hash(float p) { p = fract(p * 0.011); p *= p + 7.5; p *= p + p; return fract(p); }
+
+float perlin(vec3 x) {
+  const vec3 step = vec3(110, 241, 171);
+
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+
+  float n = dot(i, step);
+
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix( hash(n + dot(step, vec3(0, 0, 0))), hash(n + dot(step, vec3(1, 0, 0))), u.x),
+  mix( hash(n + dot(step, vec3(0, 1, 0))), hash(n + dot(step, vec3(1, 1, 0))), u.x), u.y),
+  mix(mix( hash(n + dot(step, vec3(0, 0, 1))), hash(n + dot(step, vec3(1, 0, 1))), u.x),
+  mix( hash(n + dot(step, vec3(0, 1, 1))), hash(n + dot(step, vec3(1, 1, 1))), u.x), u.y), u.z);
 }
+
+// Fractal Brownian Motion
+float fbm6(vec3 x) {
+  const int noise_octaves_count = 6;
+  float v = 0.0;
+  float a = 0.5;
+  vec3 shift = vec3(100);
+  for (int i = 0; i < noise_octaves_count; ++i) {
+    v += a * perlin(x);
+    x = x * 2.0 + shift;
+    a *= 0.5;
+  }
+  return v;
+}
+
+float noise(vec3 pt) {
+  return fbm6(pt / 10.) - 0.5 - pt.y * 0.05;
+}
+
 
 vec3 vertex_interp(float isolevel, vec3 p1, vec3 p2, float valp1, float valp2) {
   if (abs(isolevel - valp1) < 0.00001f) { return p1; }

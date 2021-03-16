@@ -311,7 +311,7 @@ static constexpr std::int32_t tri_table[256][16] =
      {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
 // clang-format on
 
-static constexpr int chunk_dimension = 16;
+static constexpr int chunk_dimension = 32;
 
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
                   int /*mods*/)
@@ -1229,7 +1229,9 @@ void App::generate_mesh()
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                           pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
 
-  vkCmdDispatch(command_buffer, 1, 1, chunk_dimension);
+  constexpr std::uint32_t local_size = 4;
+  const auto f = chunk_dimension / local_size;
+  vkCmdDispatch(command_buffer, f, f, f);
   VK_CHECK(vkEndCommandBuffer(command_buffer));
 
   const VkSubmitInfo submit_info{
