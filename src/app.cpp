@@ -11,6 +11,9 @@
 
 #include "vulkan_helpers/graphics_pipeline.hpp"
 #include "vulkan_helpers/shader_module.hpp"
+#include "vulkan_helpers/sync.hpp"
+
+#include "vulkan_helpers/debug_utils.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -674,28 +677,22 @@ void App::init_framebuffer()
 
 void App::init_sync_strucures()
 {
-  static constexpr VkSemaphoreCreateInfo semaphore_create_info{
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      .pNext = nullptr,
-      .flags = 0,
-  };
-
-  static constexpr VkFenceCreateInfo fence_create_info{
-      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      .pNext = nullptr,
-      .flags = 0,
-  };
-
-  VK_CHECK(vkCreateFence(context_.device(), &fence_create_info, nullptr,
-                         &upload_context_.fence));
-
-  for (auto& frame_Data : frame_data_) {
-    VK_CHECK(vkCreateSemaphore(context_.device(), &semaphore_create_info,
-                               nullptr, &frame_Data.render_semaphore));
-    VK_CHECK(vkCreateSemaphore(context_.device(), &semaphore_create_info,
-                               nullptr, &frame_Data.present_semaphore));
-    VK_CHECK(vkCreateFence(context_.device(), &fence_create_info, nullptr,
-                           &frame_Data.render_fence));
+  upload_context_.fence =
+      vkh::create_fence(context_, {.debug_name = "Upload Fence"}).value();
+  for (auto i = 0u; i < frames_in_flight; ++i) {
+    auto& frame_data = frame_data_[i];
+    frame_data.render_semaphore =
+        vkh::create_semaphore(
+            context_,
+            {.debug_name = fmt::format("Render Semaphore ({})", i).c_str()})
+            .value();
+    frame_data.present_semaphore =
+        vkh::create_semaphore(
+            context_,
+            {.debug_name = fmt::format("present Fence ({})", i).c_str()})
+            .value();
+    frame_data.render_fence =
+        vkh::create_fence(context_, {.debug_name = "Upload Fence"}).value();
   }
 }
 
@@ -771,10 +768,10 @@ void App::init_descriptors()
       .pBindings = &camera_buffer_binding,
   };
 
-  constexpr VkDescriptorPoolSize pool_sizes[] = {
+  static constexpr VkDescriptorPoolSize pool_sizes[] = {
       {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10}};
 
-  const VkDescriptorPoolCreateInfo pool_info = {
+  static constexpr VkDescriptorPoolCreateInfo pool_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .flags = 0,
       .maxSets = 10,
@@ -805,8 +802,8 @@ void App::init_descriptors()
         .pSetLayouts = &global_descriptor_set_layout_,
     };
 
-    vkAllocateDescriptorSets(context_.device(), &alloc_info,
-                             &frame_data.global_descriptor);
+    VK_CHECK(vkAllocateDescriptorSets(context_.device(), &alloc_info,
+                                      &frame_data.global_descriptor));
 
     const VkDescriptorBufferInfo buffer_info = {
         .buffer = frame_data.camera_buffer.buffer,
@@ -841,10 +838,14 @@ void App::init_pipeline()
                                   nullptr, &terrain_graphics_pipeline_layout_));
 
   auto terrain_vert_shader_module =
-      vkh::create_shader_module(context_.device(), "shaders/terrain.vert.spv")
+      vkh::load_shader_module_from_file(context_, "shaders/terrain.vert.spv",
+                                        {.debug_name = "Terrain Vertex Shader"})
           .expect("Cannot load terrain.vert.spv");
+
   auto terrain_frag_shader_module =
-      vkh::create_shader_module(context_.device(), "shaders/terrain.frag.spv")
+      vkh::load_shader_module_from_file(
+          context_, "shaders/terrain.frag.spv",
+          {.debug_name = "Terrain Fragment Shader"})
           .expect("Cannot load terrain.frag.spv");
 
   const VkPipelineShaderStageCreateInfo terrain_shader_stages[] = {
@@ -859,28 +860,30 @@ void App::init_pipeline()
 
   terrain_graphics_pipeline_ =
       vkh::create_graphics_pipeline(
-          context_.device(),
+          context_,
           vkh::GraphicsPipelineCreateInfo{
               .pipeline_layout = terrain_graphics_pipeline_layout_,
               .render_pass = render_pass_,
               .window_extend = window_extent_,
+              .debug_name = "Terrain Graphics Pipeline",
               .shader_stages = terrain_shader_stages,
               .cull_mode = vkh::CullMode::back})
           .expect("Failed to create terrain graphics pipeline");
-  VK_CHECK(vkh::set_debug_name(context_, terrain_graphics_pipeline_,
-                               "Terrain Graphics Pipeline"));
 
   vkDestroyShaderModule(context_.device(), terrain_vert_shader_module, nullptr);
   vkDestroyShaderModule(context_.device(), terrain_frag_shader_module, nullptr);
 
-  auto wireframe_vert_ret = vkh::create_shader_module(
-      context_.device(), "shaders/wireframe.vert.spv");
-  auto wireframe_frag_ret = vkh::create_shader_module(
-      context_.device(), "shaders/wireframe.frag.spv");
   auto wireframe_vert_shader_module =
-      wireframe_vert_ret.expect("Cannot load wireframe.vert.spv");
+      vkh::load_shader_module_from_file(
+          context_, "shaders/wireframe.vert.spv",
+          {.debug_name = "Wireframe Vertex Shader"})
+          .expect("Cannot load wireframe.vert.spv");
+
   auto wireframe_frag_shader_module =
-      wireframe_frag_ret.expect("Cannot load wireframe.vert.spv");
+      vkh::load_shader_module_from_file(
+          context_, "shaders/wireframe.frag.spv",
+          {.debug_name = "Wireframe Fragment Shader"})
+          .expect("Cannot load wireframe.vert.spv");
   const VkPipelineShaderStageCreateInfo wireframe_shader_stages[] = {
       {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
        .stage = VK_SHADER_STAGE_VERTEX_BIT,
@@ -893,16 +896,15 @@ void App::init_pipeline()
 
   terrain_wireframe_pipeline_ =
       vkh::create_graphics_pipeline(
-          context_.device(),
+          context_,
           vkh::GraphicsPipelineCreateInfo{
               .pipeline_layout = terrain_graphics_pipeline_layout_,
               .render_pass = render_pass_,
               .window_extend = window_extent_,
+              .debug_name = "Terrain Wireframe Pipeline",
               .shader_stages = wireframe_shader_stages,
               .polygon_mode = vkh::PolygonMode::line})
           .expect("Failed to create terrain wireframe graphics pipeline");
-  VK_CHECK(vkh::set_debug_name(context_, terrain_wireframe_pipeline_,
-                               "Terrain Wireframe Pipeline"));
 
   vkDestroyShaderModule(context_.device(), wireframe_vert_shader_module,
                         nullptr);
@@ -1090,7 +1092,7 @@ void App::generate_mesh()
   constexpr size_t vertices_per_triangle = 3;
   constexpr size_t vertex_buffer_size =
       sizeof(Vertex) * max_triangles_per_cell * vertices_per_triangle *
-      chunk_dimension * chunk_dimension * chunk_dimension;
+      chunk_dimension * chunk_dimension * chunk_dimension * 10;
   terrain_mesh_.vertex_buffer_ = create_buffer({
       .size = vertex_buffer_size,
       .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
@@ -1139,10 +1141,10 @@ void App::generate_mesh()
   vkCreatePipelineLayout(context_.device(), &pipeline_layout_create_info,
                          nullptr, &pipeline_layout);
 
-  VkShaderModule module =
-      vkh::create_shader_module(context_.device(),
-                                "shaders/terrain_meshing.comp.spv")
-          .expect("Cannot load terrain_meshing.comp.spv");
+  VkShaderModule module = vkh::load_shader_module_from_file(
+                              context_, "shaders/terrain_meshing.comp.spv",
+                              {.debug_name = "Terrain Meshing Compute Shader"})
+                              .expect("Cannot load terrain_meshing.comp.spv");
 
   const VkComputePipelineCreateInfo compute_pipeline_create_info{
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -1159,8 +1161,9 @@ void App::generate_mesh()
   VK_CHECK(vkCreateComputePipelines(context_.device(), {}, 1,
                                     &compute_pipeline_create_info, nullptr,
                                     &compute_pipeline));
-  VK_CHECK(vkh::set_debug_name(context_, compute_pipeline,
-                               "Terrian Meshing Pipeline"));
+  VK_CHECK(vkh::set_debug_name(
+      context_, beyond::bit_cast<uint64_t>(compute_pipeline),
+      VK_OBJECT_TYPE_PIPELINE, "Terrian Meshing Pipeline"));
 
   const VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,

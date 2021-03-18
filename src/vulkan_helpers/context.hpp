@@ -126,7 +126,12 @@ public:
 
   BEYOND_FORCE_INLINE explicit operator bool()
   {
-    return instance_;
+    return instance_ != nullptr;
+  }
+
+  BEYOND_FORCE_INLINE explicit(false) operator VkDevice()
+  {
+    return device_;
   }
 };
 

@@ -1,18 +1,16 @@
 #ifndef VOXEL_GAME_VULKAN_GRAPHICS_PIPELINE_HPP
 #define VOXEL_GAME_VULKAN_GRAPHICS_PIPELINE_HPP
 
-#include <beyond/types/expected.hpp>
-
 #include <vulkan/vulkan.h>
 
 #include <span>
 #include <string>
 
+#include "expected.hpp"
+
 namespace vkh {
 
 class Context;
-
-template <class T> using Expected = beyond::expected<T, VkResult>;
 
 enum class PolygonMode {
   fill = VK_POLYGON_MODE_FILL,
@@ -34,18 +32,16 @@ struct GraphicsPipelineCreateInfo {
   VkExtent2D window_extend = {};
 
   // Optional
+  const char* debug_name = nullptr;
   std::span<const VkPipelineShaderStageCreateInfo> shader_stages;
   PolygonMode polygon_mode = PolygonMode::fill;
   CullMode cull_mode = CullMode::none;
 };
 
 [[nodiscard]] auto
-create_graphics_pipeline(VkDevice device,
+create_graphics_pipeline(Context& context,
                          const GraphicsPipelineCreateInfo& create_info)
     -> Expected<VkPipeline>;
-
-[[nodiscard]] auto set_debug_name(Context& context, VkPipeline pipeline,
-                                  const char* name) noexcept -> VkResult;
 
 } // namespace vkh
 

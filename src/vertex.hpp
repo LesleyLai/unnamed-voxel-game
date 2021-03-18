@@ -6,6 +6,7 @@
 #include <beyond/math/vector.hpp>
 
 #include <array>
+#include <cstddef>
 
 struct Vertex {
   beyond::Vec4 position;

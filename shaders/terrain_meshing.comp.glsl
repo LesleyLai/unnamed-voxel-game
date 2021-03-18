@@ -95,13 +95,15 @@ float noise(vec3 pt) {
   return fbm6(pt / 10.) - 0.5 - pt.y * 0.05;
 }
 
+float inverse_lerp(float a, float b, float v) {
+  return (v - a) / (b - a);
+}
 
 vec3 vertex_interp(float isolevel, vec3 p1, vec3 p2, float valp1, float valp2) {
   if (abs(isolevel - valp1) < 0.00001f) { return p1; }
   if (abs(isolevel - valp2) < 0.00001f) { return p2; }
   if (abs(valp1 - valp2) < 0.00001f) { return p1; }
-  float mu = (isolevel - valp1) / (valp2 - valp1);
-  return mix(p1, p2, mu);
+  return mix(p1, p2, inverse_lerp(valp1, valp2, isolevel));
 }
 
 const uvec2 cornor_table[12] = uvec2[](

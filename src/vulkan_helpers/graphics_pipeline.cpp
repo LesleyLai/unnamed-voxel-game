@@ -1,18 +1,14 @@
 #include "graphics_pipeline.hpp"
 
-#include <beyond/utils/size.hpp>
-#include <beyond/utils/to_pointer.hpp>
-
 #include "context.hpp"
 #include "debug_utils.hpp"
-#include "vk_check.hpp"
 
 #include "../vertex.hpp"
 
 namespace vkh {
 
 [[nodiscard]] auto
-create_graphics_pipeline(VkDevice device,
+create_graphics_pipeline(Context& context,
                          const GraphicsPipelineCreateInfo& create_info)
     -> beyond::expected<VkPipeline, VkResult>
 {
@@ -120,19 +116,19 @@ create_graphics_pipeline(VkDevice device,
   };
 
   VkPipeline pipeline{};
-  const auto result = vkCreateGraphicsPipelines(
-      device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline);
+  if (const auto result =
+          vkCreateGraphicsPipelines(context.device(), VK_NULL_HANDLE, 1,
+                                    &pipeline_create_info, nullptr, &pipeline);
+      result != VK_SUCCESS) {
+    return beyond::unexpected{result};
+  }
 
-  if (result != VK_SUCCESS) { return beyond::unexpected{result}; }
+  if (set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline),
+                     VK_OBJECT_TYPE_PIPELINE, create_info.debug_name)) {
+    report_fail_to_set_debug_name(create_info.debug_name);
+  }
 
   return pipeline;
-}
-
-[[nodiscard]] auto set_debug_name(Context& context, VkPipeline pipeline,
-                                  const char* name) noexcept -> VkResult
-{
-  return set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline),
-                        VK_OBJECT_TYPE_PIPELINE, name);
 }
 
 } // namespace vkh

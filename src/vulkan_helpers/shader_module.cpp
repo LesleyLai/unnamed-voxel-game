@@ -1,8 +1,12 @@
 #include "shader_module.hpp"
 
+#include "context.hpp"
+#include "debug_utils.hpp"
+
 #include <beyond/utils/bit_cast.hpp>
 
 #include <cstddef>
+#include <fmt/format.h>
 #include <fstream>
 
 namespace {
@@ -32,13 +36,14 @@ namespace {
 
 namespace vkh {
 
-[[nodiscard]] auto create_shader_module(VkDevice device,
-                                        const std::string_view filename)
+[[nodiscard]] auto
+load_shader_module_from_file(Context& context, const std::string_view filename,
+                             const ShaderModuleCreateInfo& create_info)
     -> beyond::expected<VkShaderModule, VkResult>
 {
   const auto buffer = read_file(filename);
 
-  const VkShaderModuleCreateInfo create_info{
+  const VkShaderModuleCreateInfo vk_create_info{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
       .pNext = nullptr,
       .flags = 0,
@@ -46,14 +51,18 @@ namespace vkh {
       .pCode = beyond::bit_cast<const uint32_t*>(buffer.data()),
   };
 
-  VkShaderModule module = nullptr;
-  if (VkResult result =
-          vkCreateShaderModule(device, &create_info, nullptr, &module);
+  VkShaderModule module{};
+  if (VkResult result = vkCreateShaderModule(context.device(), &vk_create_info,
+                                             nullptr, &module);
       result != VK_SUCCESS) {
     return beyond::unexpected(result);
-  } else {
-    return module;
   }
+
+  if (set_debug_name(context, beyond::bit_cast<uint64_t>(module),
+                     VK_OBJECT_TYPE_SHADER_MODULE, create_info.debug_name)) {
+    fmt::print("Cannot create debug name for {}\n", create_info.debug_name);
+  }
+  return module;
 }
 
 } // namespace vkh

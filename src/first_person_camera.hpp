@@ -10,7 +10,7 @@
 // Default camera values
 constexpr float default_yaw = -90.0f;
 constexpr float default_pitch = 0.0f;
-constexpr float default_speed = 2.5f;
+constexpr float default_speed = 5.0f;
 constexpr float default_mouse_sensitivity = 0.1f;
 constexpr float default_zoom = 45.0f;
 

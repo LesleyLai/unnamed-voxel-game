@@ -11,6 +11,8 @@ class Context;
                                   VkObjectType object_type,
                                   const char* name) noexcept -> VkResult;
 
+void report_fail_to_set_debug_name(const char* name) noexcept;
+
 } // namespace vkh
 
 #endif // VOXEL_GAME_VULKAN_DEBUG_UTILS_HPP

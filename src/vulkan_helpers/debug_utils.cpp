@@ -2,6 +2,8 @@
 
 #include "context.hpp"
 
+#include <fmt/format.h>
+
 namespace vkh {
 
 [[nodiscard]] auto set_debug_name(Context& context, uint64_t object_handle,
@@ -15,6 +17,11 @@ namespace vkh {
       .pObjectName = name};
   return context.functions().setDebugUtilsObjectNameEXT(context.device(),
                                                         &name_info);
+}
+
+void report_fail_to_set_debug_name(const char* name) noexcept
+{
+  fmt::print("Cannot create debug name for {}\n", name);
 }
 
 } // namespace vkh
