@@ -1,6 +1,8 @@
 #include "context.hpp"
 
-#include "vk_check.hpp"
+#include "buffer.hpp"
+#include "error_handling.hpp"
+
 #include <VkBootstrap.h>
 #include <fmt/format.h>
 
@@ -8,8 +10,6 @@
 #include <GLFW/glfw3.h>
 
 #include <beyond/utils/bit_cast.hpp>
-
-#include "buffer.hpp"
 
 namespace {
 
@@ -162,8 +162,7 @@ auto Context::operator=(Context&& other) & noexcept -> Context&
 auto Context::map_impl(const Buffer& buffer) -> Expected<void*>
 {
   void* ptr = nullptr;
-  const VkResult result = vmaMapMemory(allocator_, buffer.allocation, &ptr);
-  if (result != VK_SUCCESS) { return beyond::make_unexpected(result); }
+  VKH_TRY(vmaMapMemory(allocator_, buffer.allocation, &ptr));
   return ptr;
 }
 

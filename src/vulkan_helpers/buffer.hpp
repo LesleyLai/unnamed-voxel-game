@@ -6,7 +6,7 @@
 
 #include <beyond/utils/assert.hpp>
 
-#include "expected.hpp"
+#include "error_handling.hpp"
 
 namespace vkh {
 

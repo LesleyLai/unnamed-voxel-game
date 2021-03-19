@@ -6,7 +6,7 @@
 #include <span>
 #include <string>
 
-#include "expected.hpp"
+#include "error_handling.hpp"
 #include "unique_resource.hpp"
 
 namespace vkh {

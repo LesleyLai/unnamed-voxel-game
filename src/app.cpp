@@ -14,7 +14,7 @@
 #include "vulkan_helpers/sync.hpp"
 
 #include "vulkan_helpers/debug_utils.hpp"
-#include "vulkan_helpers/vk_check.hpp"
+#include "vulkan_helpers/error_handling.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"

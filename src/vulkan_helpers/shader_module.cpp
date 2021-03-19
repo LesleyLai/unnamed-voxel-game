@@ -2,6 +2,7 @@
 
 #include "context.hpp"
 #include "debug_utils.hpp"
+#include "error_handling.hpp"
 
 #include <beyond/utils/bit_cast.hpp>
 
@@ -52,11 +53,8 @@ load_shader_module_from_file(Context& context, const std::string_view filename,
   };
 
   VkShaderModule module{};
-  if (VkResult result = vkCreateShaderModule(context.device(), &vk_create_info,
-                                             nullptr, &module);
-      result != VK_SUCCESS) {
-    return beyond::unexpected(result);
-  }
+  VKH_TRY(vkCreateShaderModule(context.device(), &vk_create_info, nullptr,
+                               &module));
 
   if (set_debug_name(context, beyond::bit_cast<uint64_t>(module),
                      VK_OBJECT_TYPE_SHADER_MODULE, create_info.debug_name)) {

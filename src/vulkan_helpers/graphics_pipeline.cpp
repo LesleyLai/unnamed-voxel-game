@@ -2,6 +2,7 @@
 
 #include "context.hpp"
 #include "debug_utils.hpp"
+#include "error_handling.hpp"
 
 #include "../vertex.hpp"
 
@@ -12,6 +13,8 @@ create_graphics_pipeline(Context& context,
                          const GraphicsPipelineCreateInfo& create_info)
     -> beyond::expected<VkPipeline, VkResult>
 {
+  BEYOND_ENSURE(create_info.pipeline_layout != VK_NULL_HANDLE);
+  BEYOND_ENSURE(create_info.render_pass != VK_NULL_HANDLE);
 
   static constexpr auto vertex_binding_description =
       Vertex::binding_description();
@@ -116,12 +119,8 @@ create_graphics_pipeline(Context& context,
   };
 
   VkPipeline pipeline{};
-  if (const auto result =
-          vkCreateGraphicsPipelines(context.device(), VK_NULL_HANDLE, 1,
-                                    &pipeline_create_info, nullptr, &pipeline);
-      result != VK_SUCCESS) {
-    return beyond::unexpected{result};
-  }
+  VKH_TRY(vkCreateGraphicsPipelines(context.device(), VK_NULL_HANDLE, 1,
+                                    &pipeline_create_info, nullptr, &pipeline));
 
   if (create_info.debug_name != nullptr &&
       set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline),

@@ -10,7 +10,7 @@
 #include <cstdint>
 
 #include "../window_helpers/window.hpp"
-#include "expected.hpp"
+#include "error_handling.hpp"
 
 namespace vkh {
 

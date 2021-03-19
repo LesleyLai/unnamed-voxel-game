@@ -2,6 +2,7 @@
 
 #include "context.hpp"
 #include "debug_utils.hpp"
+#include "error_handling.hpp"
 
 #include <beyond/utils/bit_cast.hpp>
 
@@ -21,12 +22,9 @@ auto create_buffer(vkh::Context& context,
       .usage = buffer_create_info.memory_usage};
 
   Buffer allocated_buffer;
-  if (VkResult result = vmaCreateBuffer(
-          context.allocator(), &vk_buffer_create_info, &vma_alloc_info,
-          &allocated_buffer.buffer, &allocated_buffer.allocation, nullptr);
-      result != VK_SUCCESS) {
-    return beyond::make_unexpected(result);
-  }
+  VKH_TRY(vmaCreateBuffer(context.allocator(), &vk_buffer_create_info,
+                          &vma_alloc_info, &allocated_buffer.buffer,
+                          &allocated_buffer.allocation, nullptr));
 
   if (buffer_create_info.debug_name != nullptr &&
       set_debug_name(context,
@@ -42,15 +40,13 @@ auto create_buffer_from_data(vkh::Context& context,
                              const BufferCreateInfo& buffer_create_info,
                              const void* data) -> Expected<Buffer>
 {
-  auto buffer_ret = create_buffer(context, buffer_create_info);
-  if (!buffer_ret.has_value()) { return buffer_ret; }
-
-  Buffer buffer = *buffer_ret;
-  auto map_ret = context.map(buffer);
-  if (!map_ret.has_value()) { return beyond::make_unexpected(map_ret.error()); }
-  std::memcpy(*map_ret, data, buffer_create_info.size);
-  context.unmap(buffer);
-  return buffer;
+  return create_buffer(context, buffer_create_info)
+      .and_then([&](Buffer buffer) -> Expected<Buffer> {
+        BEYOND_EXPECTED_ASSIGN(void*, buffer_ptr, context.map(buffer));
+        std::memcpy(buffer_ptr, data, buffer_create_info.size);
+        context.unmap(buffer);
+        return buffer;
+      });
 }
 
 void destroy_buffer(vkh::Context& context, Buffer buffer)

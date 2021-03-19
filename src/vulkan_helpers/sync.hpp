@@ -3,7 +3,7 @@
 
 #include <vulkan/vulkan_core.h>
 
-#include "expected.hpp"
+#include "error_handling.hpp"
 
 namespace vkh {
 
