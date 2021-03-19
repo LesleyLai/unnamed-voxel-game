@@ -787,14 +787,15 @@ void App::init_descriptors()
                                        &set_layout_create_info, nullptr,
                                        &global_descriptor_set_layout_));
 
-  for (auto& frame_data : frame_data_) {
+  for (auto i = 0u; i < frames_in_flight; ++i) {
+    auto& frame_data = frame_data_[i];
     frame_data.camera_buffer =
-        vkh::create_buffer(context_,
-                           {
-                               .size = sizeof(GPUCameraData),
-                               .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                               .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                           })
+        vkh::create_buffer(
+            context_,
+            {.size = sizeof(GPUCameraData),
+             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+             .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+             .debug_name = fmt::format("Camera Buffer ({})", i).c_str()})
             .value();
 
     // allocate one descriptor set for each frame
@@ -1062,25 +1063,22 @@ void App::render()
 void App::generate_mesh()
 {
   auto triangle_table_buffer =
-      vkh::create_buffer_from_data(
-          context_,
-          {
-              .size = sizeof(tri_table),
-              .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-              .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-          },
-          beyond::to_pointer(tri_table))
+      vkh::create_buffer_from_data(context_,
+                                   {.size = sizeof(tri_table),
+                                    .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                    .debug_name = "Triangle Table Buffer"},
+                                   beyond::to_pointer(tri_table))
           .value();
 
-  auto edge_table_buffer = vkh::create_buffer_from_data(
-                               context_,
-                               {
-                                   .size = sizeof(edge_table),
-                                   .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                   .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                               },
-                               beyond::to_pointer(edge_table))
-                               .value();
+  auto edge_table_buffer =
+      vkh::create_buffer_from_data(context_,
+                                   {.size = sizeof(edge_table),
+                                    .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                    .debug_name = "Edge Table Buffer"},
+                                   beyond::to_pointer(edge_table))
+          .value();
 
   static constexpr VkDrawIndirectCommand indirect_command{
       .vertexCount = 0,
@@ -1090,12 +1088,11 @@ void App::generate_mesh()
   };
   indirect_buffer_ = vkh::create_buffer_from_data(
                          context_,
-                         {
-                             .size = sizeof(VkDrawIndirectCommand),
-                             .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                             .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                         },
+                         {.size = sizeof(VkDrawIndirectCommand),
+                          .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                          .debug_name = "Terrain Indirect Buffer"},
                          indirect_command)
                          .value();
 
@@ -1105,25 +1102,22 @@ void App::generate_mesh()
       sizeof(Vertex) * max_triangles_per_cell * vertices_per_triangle *
       chunk_dimension * chunk_dimension * chunk_dimension * 10;
   terrain_mesh_.vertex_buffer_ =
-      vkh::create_buffer(context_,
-                         {
-                             .size = vertex_buffer_size,
-                             .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                             .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-                         })
+      vkh::create_buffer(context_, {.size = vertex_buffer_size,
+                                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                    .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+                                    .debug_name = "Terrain Vertex Buffer"})
           .value();
 
   constexpr uint32_t input_data[] = {1, 2, 3, 4, 5, 6, 7, 8};
-  auto input_buffer = vkh::create_buffer_from_data(
-                          context_,
-                          {
-                              .size = beyond::byte_size(input_data),
-                              .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                              .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                          },
-                          beyond::to_pointer(input_data))
-                          .value();
+  auto input_buffer =
+      vkh::create_buffer_from_data(context_,
+                                   {.size = beyond::byte_size(input_data),
+                                    .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                    .debug_name = "Compute Input Buffer"},
+                                   beyond::to_pointer(input_data))
+          .value();
 
   static constexpr VkDescriptorSetLayoutBinding
       descriptor_set_layout_bindings[] = {

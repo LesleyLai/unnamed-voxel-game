@@ -123,7 +123,8 @@ create_graphics_pipeline(Context& context,
     return beyond::unexpected{result};
   }
 
-  if (set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline),
+  if (create_info.debug_name != nullptr &&
+      set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline),
                      VK_OBJECT_TYPE_PIPELINE, create_info.debug_name)) {
     report_fail_to_set_debug_name(create_info.debug_name);
   }

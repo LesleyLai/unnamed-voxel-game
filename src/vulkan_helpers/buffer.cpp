@@ -1,6 +1,9 @@
 #include "buffer.hpp"
 
 #include "context.hpp"
+#include "debug_utils.hpp"
+
+#include <beyond/utils/bit_cast.hpp>
 
 namespace vkh {
 
@@ -24,6 +27,14 @@ auto create_buffer(vkh::Context& context,
       result != VK_SUCCESS) {
     return beyond::make_unexpected(result);
   }
+
+  if (buffer_create_info.debug_name != nullptr &&
+      set_debug_name(context,
+                     beyond::bit_cast<uint64_t>(allocated_buffer.buffer),
+                     VK_OBJECT_TYPE_BUFFER, buffer_create_info.debug_name)) {
+    report_fail_to_set_debug_name(buffer_create_info.debug_name);
+  }
+
   return allocated_buffer;
 }
 
