@@ -9,6 +9,8 @@
 
 #include <beyond/utils/bit_cast.hpp>
 
+#include "buffer.hpp"
+
 namespace {
 
 auto create_surface_glfw(VkInstance instance, GLFWwindow* window)
@@ -155,6 +157,19 @@ auto Context::operator=(Context&& other) & noexcept -> Context&
     allocator_ = std::exchange(other.allocator_, {});
   }
   return *this;
+}
+
+auto Context::map_impl(const Buffer& buffer) -> Expected<void*>
+{
+  void* ptr = nullptr;
+  const VkResult result = vmaMapMemory(allocator_, buffer.allocation, &ptr);
+  if (result != VK_SUCCESS) { return beyond::make_unexpected(result); }
+  return ptr;
+}
+
+void Context::unmap(const Buffer& buffer)
+{
+  vmaUnmapMemory(allocator_, buffer.allocation);
 }
 
 } // namespace vkh

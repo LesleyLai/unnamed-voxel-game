@@ -35,9 +35,11 @@ public:
   enum class Movement { FORWARD, BACKWARD, LEFT, RIGHT };
 
   // constructor with vectors
-  FirstPersonCamera(beyond::Vec3 position = beyond::Vec3(0.0f, 0.0f, 0.0f),
-                    beyond::Vec3 up = beyond::Vec3(0.0f, 1.0f, 0.0f),
-                    float yaw = default_yaw, float pitch = default_pitch)
+  explicit FirstPersonCamera(beyond::Vec3 position = beyond::Vec3(0.0f, 0.0f,
+                                                                  0.0f),
+                             beyond::Vec3 up = beyond::Vec3(0.0f, 1.0f, 0.0f),
+                             float yaw = default_yaw,
+                             float pitch = default_pitch)
       : position_{position}, front_{beyond::Vec3(0.0f, 0.0f, -1.0f)}, up_{up},
         yaw_{yaw}, pitch_{pitch}, speed_(default_speed),
         mouse_sensitivity_(default_mouse_sensitivity), zoom_(default_zoom)

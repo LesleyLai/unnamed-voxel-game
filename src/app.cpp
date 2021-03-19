@@ -14,6 +14,7 @@
 #include "vulkan_helpers/sync.hpp"
 
 #include "vulkan_helpers/debug_utils.hpp"
+#include "vulkan_helpers/vk_check.hpp"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -410,8 +411,8 @@ App::~App()
   vkDestroyCommandPool(context_.device(), upload_context_.command_pool,
                        nullptr);
 
-  destroy_allocated_buffer(context_, indirect_buffer_);
-  destroy_allocated_buffer(context_, terrain_mesh_.vertex_buffer_);
+  destroy_buffer(context_, indirect_buffer_);
+  destroy_buffer(context_, terrain_mesh_.vertex_buffer_);
 
   vkDestroyPipeline(context_.device(), terrain_wireframe_pipeline_, nullptr);
   vkDestroyPipeline(context_.device(), terrain_graphics_pipeline_, nullptr);
@@ -421,7 +422,7 @@ App::~App()
   vkDestroyRenderPass(context_.device(), render_pass_, nullptr);
 
   for (auto& frame_data : frame_data_) {
-    destroy_allocated_buffer(context_, frame_data.camera_buffer);
+    destroy_buffer(context_, frame_data.camera_buffer);
 
     vkDestroyFence(context_.device(), frame_data.render_fence, nullptr);
     vkDestroySemaphore(context_.device(), frame_data.render_semaphore, nullptr);
@@ -787,11 +788,14 @@ void App::init_descriptors()
                                        &global_descriptor_set_layout_));
 
   for (auto& frame_data : frame_data_) {
-    frame_data.camera_buffer = create_buffer(BufferCreateInfo{
-        .size = sizeof(GPUCameraData),
-        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-    });
+    frame_data.camera_buffer =
+        vkh::create_buffer(context_,
+                           {
+                               .size = sizeof(GPUCameraData),
+                               .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                               .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                           })
+            .value();
 
     // allocate one descriptor set for each frame
     const VkDescriptorSetAllocateInfo alloc_info = {
@@ -954,9 +958,9 @@ void App::render()
   };
 
   // and copy it to the buffer
-  void* data = current_frame_data.camera_buffer.map(context_);
+  void* data = context_.map(current_frame_data.camera_buffer).value();
   memcpy(data, &camera_data, sizeof(GPUCameraData));
-  current_frame_data.camera_buffer.unmap(context_);
+  context_.unmap(current_frame_data.camera_buffer);
 
   static constexpr std::uint64_t time_out = 1e9;
   VK_CHECK(vkWaitForFences(context_.device(), 1,
@@ -1057,21 +1061,26 @@ void App::render()
 
 void App::generate_mesh()
 {
-  auto triangle_table_buffer = create_buffer_from_data(
-      {
-          .size = sizeof(tri_table),
-          .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-      },
-      static_cast<const void*>(&tri_table));
+  auto triangle_table_buffer =
+      vkh::create_buffer_from_data(
+          context_,
+          {
+              .size = sizeof(tri_table),
+              .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+              .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+          },
+          beyond::to_pointer(tri_table))
+          .value();
 
-  auto edge_table_buffer = create_buffer_from_data(
-      {
-          .size = sizeof(edge_table),
-          .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-      },
-      static_cast<const void*>(&edge_table));
+  auto edge_table_buffer = vkh::create_buffer_from_data(
+                               context_,
+                               {
+                                   .size = sizeof(edge_table),
+                                   .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                   .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                               },
+                               beyond::to_pointer(edge_table))
+                               .value();
 
   static constexpr VkDrawIndirectCommand indirect_command{
       .vertexCount = 0,
@@ -1079,35 +1088,42 @@ void App::generate_mesh()
       .firstVertex = 0,
       .firstInstance = 0,
   };
-  indirect_buffer_ = create_buffer_from_data(
-      {
-          .size = sizeof(VkDrawIndirectCommand),
-          .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-      },
-      static_cast<const void*>(&indirect_command));
+  indirect_buffer_ = vkh::create_buffer_from_data(
+                         context_,
+                         {
+                             .size = sizeof(VkDrawIndirectCommand),
+                             .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                             .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                         },
+                         indirect_command)
+                         .value();
 
   constexpr size_t max_triangles_per_cell = 5;
   constexpr size_t vertices_per_triangle = 3;
   constexpr size_t vertex_buffer_size =
       sizeof(Vertex) * max_triangles_per_cell * vertices_per_triangle *
       chunk_dimension * chunk_dimension * chunk_dimension * 10;
-  terrain_mesh_.vertex_buffer_ = create_buffer({
-      .size = vertex_buffer_size,
-      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-      .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-  });
+  terrain_mesh_.vertex_buffer_ =
+      vkh::create_buffer(context_,
+                         {
+                             .size = vertex_buffer_size,
+                             .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                             .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+                         })
+          .value();
 
   constexpr uint32_t input_data[] = {1, 2, 3, 4, 5, 6, 7, 8};
-  auto input_buffer = create_buffer_from_data(
-      BufferCreateInfo{
-          .size = beyond::byte_size(input_data),
-          .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-      },
-      beyond::to_pointer(input_data));
+  auto input_buffer = vkh::create_buffer_from_data(
+                          context_,
+                          {
+                              .size = beyond::byte_size(input_data),
+                              .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                              .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                          },
+                          beyond::to_pointer(input_data))
+                          .value();
 
   static constexpr VkDescriptorSetLayoutBinding
       descriptor_set_layout_bindings[] = {
@@ -1266,42 +1282,14 @@ void App::generate_mesh()
   vkDestroyPipelineLayout(context_.device(), pipeline_layout, nullptr);
   vkDestroyDescriptorSetLayout(context_.device(), descriptor_set_layout,
                                nullptr);
-  destroy_allocated_buffer(context_, input_buffer);
-  destroy_allocated_buffer(context_, edge_table_buffer);
-  destroy_allocated_buffer(context_, triangle_table_buffer);
+  destroy_buffer(context_, input_buffer);
+  destroy_buffer(context_, edge_table_buffer);
+  destroy_buffer(context_, triangle_table_buffer);
 }
 
 auto App::get_current_frame() -> FrameData&
 {
   return frame_data_[frame_number_ % frames_in_flight];
-}
-auto App::create_buffer(const BufferCreateInfo& buffer_create_info)
-    -> AllocatedBuffer
-{
-  const VkBufferCreateInfo vk_buffer_create_info = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = buffer_create_info.size,
-      .usage = buffer_create_info.usage,
-  };
-
-  const VmaAllocationCreateInfo vma_alloc_info{
-      .usage = buffer_create_info.memory_usage};
-
-  AllocatedBuffer allocated_buffer;
-  VK_CHECK(vmaCreateBuffer(context_.allocator(), &vk_buffer_create_info,
-                           &vma_alloc_info, &allocated_buffer.buffer,
-                           &allocated_buffer.allocation, nullptr));
-  return allocated_buffer;
-}
-
-auto App::create_buffer_from_data(const BufferCreateInfo& buffer_create_info,
-                                  const void* data) -> AllocatedBuffer
-{
-  AllocatedBuffer buffer = create_buffer(buffer_create_info);
-  void* mapped_ptr = buffer.map(context_);
-  std::memcpy(mapped_ptr, data, buffer_create_info.size);
-  buffer.unmap(context_);
-  return buffer;
 }
 
 void App::immediate_submit(

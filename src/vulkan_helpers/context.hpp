@@ -4,13 +4,17 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
+#include <beyond/types/expected.hpp>
 #include <beyond/utils/force_inline.hpp>
 
 #include <cstdint>
 
 #include "../window_helpers/window.hpp"
+#include "expected.hpp"
 
 namespace vkh {
+
+struct Buffer;
 
 struct VulkanFunctions {
   PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT = nullptr;
@@ -133,6 +137,16 @@ public:
   {
     return device_;
   }
+
+  template <typename T = void> auto map(Buffer& buffer) -> Expected<T*>
+  {
+    return map_impl(buffer).map([](void* ptr) { return static_cast<T*>(ptr); });
+  }
+
+  void unmap(const Buffer& buffer);
+
+private:
+  [[nodiscard]] auto map_impl(const Buffer& buffer) -> Expected<void*>;
 };
 
 } // namespace vkh

@@ -17,9 +17,9 @@
 #include "window_helpers/window.hpp"
 #include "window_helpers/window_manager.hpp"
 
+#include "vulkan_helpers/buffer.hpp"
 #include "vulkan_helpers/context.hpp"
 #include "vulkan_helpers/deletion_queue.hpp"
-#include "vulkan_helpers/vk_check.hpp"
 
 #include "first_person_camera.hpp"
 #include "vertex.hpp"
@@ -30,34 +30,6 @@ struct GPUCameraData {
   beyond::Mat4 viewproj;
 };
 
-struct AllocatedBuffer {
-  VkBuffer buffer{};
-  VmaAllocation allocation{};
-
-  explicit(false) operator VkBuffer()
-  {
-    return buffer;
-  }
-
-  template <typename T = void> auto map(vkh::Context& context) -> T*
-  {
-    void* ptr = nullptr;
-    VK_CHECK(vmaMapMemory(context.allocator(), allocation, &ptr));
-    return static_cast<T*>(ptr);
-  }
-
-  void unmap(vkh::Context& context)
-  {
-    vmaUnmapMemory(context.allocator(), allocation);
-  }
-};
-
-inline void destroy_allocated_buffer(vkh::Context& context,
-                                     AllocatedBuffer buffer)
-{
-  vmaDestroyBuffer(context.allocator(), buffer.buffer, buffer.allocation);
-}
-
 struct FrameData {
   VkSemaphore render_semaphore{};
   VkSemaphore present_semaphore{};
@@ -66,16 +38,10 @@ struct FrameData {
   VkCommandPool command_pool{};
   VkCommandBuffer main_command_buffer{};
 
-  AllocatedBuffer camera_buffer{};
+  vkh::Buffer camera_buffer{};
   VkDescriptorSet global_descriptor{};
 };
 constexpr std::uint32_t frames_in_flight = 2;
-
-struct BufferCreateInfo {
-  size_t size = 0;
-  VkBufferUsageFlags usage = 0;
-  VmaMemoryUsage memory_usage = VMA_MEMORY_USAGE_UNKNOWN;
-};
 
 struct AllocatedImage {
   VkImage image{};
@@ -83,7 +49,7 @@ struct AllocatedImage {
 };
 
 struct TerrainChunkVertexCache {
-  AllocatedBuffer vertex_buffer_;
+  vkh::Buffer vertex_buffer_;
 };
 
 enum class MouseDraggingState { No, Start, Dragging };
@@ -127,7 +93,7 @@ class App {
   VkPipeline terrain_wireframe_pipeline_{};
 
   TerrainChunkVertexCache terrain_mesh_{};
-  AllocatedBuffer indirect_buffer_{};
+  vkh::Buffer indirect_buffer_{};
 
   FirstPersonCamera camera_{beyond::Vec3(0.0f, 0.0f, 5.0f)};
   MouseDraggingState dragging_ = MouseDraggingState::No;
@@ -177,13 +143,6 @@ private:
   void init_pipeline();
 
   [[nodiscard]] auto get_current_frame() -> FrameData&;
-
-  [[nodiscard]] auto create_buffer(const BufferCreateInfo& buffer_create_info)
-      -> AllocatedBuffer;
-
-  [[nodiscard]] auto
-  create_buffer_from_data(const BufferCreateInfo& buffer_create_info,
-                          const void* data) -> AllocatedBuffer;
 
   void render();
   void render_gui();
