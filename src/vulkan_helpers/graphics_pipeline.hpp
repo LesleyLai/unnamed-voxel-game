@@ -7,6 +7,7 @@
 #include <string>
 
 #include "expected.hpp"
+#include "unique_resource.hpp"
 
 namespace vkh {
 
@@ -42,6 +43,15 @@ struct GraphicsPipelineCreateInfo {
 create_graphics_pipeline(Context& context,
                          const GraphicsPipelineCreateInfo& create_info)
     -> Expected<VkPipeline>;
+
+struct Pipeline : UniqueResource<VkPipeline, vkDestroyPipeline> {
+  using UniqueResource<VkPipeline, vkDestroyPipeline>::UniqueResource;
+};
+
+[[nodiscard]] auto
+create_graphics_pipeline_unique(Context& context,
+                                const GraphicsPipelineCreateInfo& create_info)
+    -> Expected<Pipeline>;
 
 } // namespace vkh
 

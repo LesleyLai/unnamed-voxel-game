@@ -414,8 +414,8 @@ App::~App()
   destroy_buffer(context_, indirect_buffer_);
   destroy_buffer(context_, terrain_mesh_.vertex_buffer_);
 
-  vkDestroyPipeline(context_.device(), terrain_wireframe_pipeline_, nullptr);
-  vkDestroyPipeline(context_.device(), terrain_graphics_pipeline_, nullptr);
+  terrain_wireframe_pipeline_.reset();
+  terrain_graphics_pipeline_.reset();
   vkDestroyPipelineLayout(context_.device(), terrain_graphics_pipeline_layout_,
                           nullptr);
 
@@ -864,7 +864,7 @@ void App::init_pipeline()
        .pName = "main"}};
 
   terrain_graphics_pipeline_ =
-      vkh::create_graphics_pipeline(
+      vkh::create_graphics_pipeline_unique(
           context_,
           vkh::GraphicsPipelineCreateInfo{
               .pipeline_layout = terrain_graphics_pipeline_layout_,
@@ -900,7 +900,7 @@ void App::init_pipeline()
        .pName = "main"}};
 
   terrain_wireframe_pipeline_ =
-      vkh::create_graphics_pipeline(
+      vkh::create_graphics_pipeline_unique(
           context_,
           vkh::GraphicsPipelineCreateInfo{
               .pipeline_layout = terrain_graphics_pipeline_layout_,

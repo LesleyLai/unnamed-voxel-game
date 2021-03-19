@@ -20,6 +20,7 @@
 #include "vulkan_helpers/buffer.hpp"
 #include "vulkan_helpers/context.hpp"
 #include "vulkan_helpers/deletion_queue.hpp"
+#include "vulkan_helpers/graphics_pipeline.hpp"
 
 #include "first_person_camera.hpp"
 #include "vertex.hpp"
@@ -89,8 +90,8 @@ class App {
   FrameData frame_data_[frames_in_flight]{};
 
   VkPipelineLayout terrain_graphics_pipeline_layout_{};
-  VkPipeline terrain_graphics_pipeline_{};
-  VkPipeline terrain_wireframe_pipeline_{};
+  vkh::Pipeline terrain_graphics_pipeline_{};
+  vkh::Pipeline terrain_wireframe_pipeline_{};
 
   TerrainChunkVertexCache terrain_mesh_{};
   vkh::Buffer indirect_buffer_{};

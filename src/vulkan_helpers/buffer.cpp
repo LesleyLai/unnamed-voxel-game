@@ -42,16 +42,15 @@ auto create_buffer_from_data(vkh::Context& context,
                              const BufferCreateInfo& buffer_create_info,
                              const void* data) -> Expected<Buffer>
 {
-  return create_buffer(context, buffer_create_info)
-      .and_then([&](Buffer buffer) -> Expected<Buffer> {
-        auto result = context.map(buffer);
-        if (!result.has_value()) {
-          return beyond::make_unexpected(result.error());
-        }
-        std::memcpy(*result, data, buffer_create_info.size);
-        context.unmap(buffer);
-        return buffer;
-      });
+  auto buffer_ret = create_buffer(context, buffer_create_info);
+  if (!buffer_ret.has_value()) { return buffer_ret; }
+
+  Buffer buffer = *buffer_ret;
+  auto map_ret = context.map(buffer);
+  if (!map_ret.has_value()) { return beyond::make_unexpected(map_ret.error()); }
+  std::memcpy(*map_ret, data, buffer_create_info.size);
+  context.unmap(buffer);
+  return buffer;
 }
 
 void destroy_buffer(vkh::Context& context, Buffer buffer)

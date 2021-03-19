@@ -132,4 +132,15 @@ create_graphics_pipeline(Context& context,
   return pipeline;
 }
 
+[[nodiscard]] auto
+create_graphics_pipeline_unique(Context& context,
+                                const GraphicsPipelineCreateInfo& create_info)
+    -> Expected<Pipeline>
+{
+  return create_graphics_pipeline(context, create_info)
+      .map([&](VkPipeline pipeline) {
+        return Pipeline{context.device(), pipeline};
+      });
+}
+
 } // namespace vkh
