@@ -14,27 +14,22 @@ layout(binding = 0) buffer indirect_buffer
   uint    firstInstance;
 } indirect;
 
-layout(binding = 1) buffer in_buffer
-{
-  uint indata[];
-};
-
 struct Vertex {
   vec4 position;// 4th dimension corrently unused
   vec4 normal;// 4th dimension corrently unused
 };
 
-layout(binding = 2) buffer out_buffer
+layout(binding = 1) buffer out_buffer
 {
   Vertex vertices[];
 };
 
-layout(binding = 3, scalar) buffer edge_table_buffer
+layout(binding = 2, scalar) buffer edge_table_buffer
 {
   uint edge_table[256];
 };
 
-layout(binding = 4, scalar) buffer tri_table_buffer
+layout(binding = 3, scalar) buffer tri_table_buffer
 {
   int tri_table[][16];
 };

@@ -23,8 +23,6 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
 
-static constexpr int chunk_dimension = 32;
-
 namespace {
 
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
@@ -108,6 +106,8 @@ App::App() : window_manager_{&WindowManager::instance()}
   init_imgui();
   init_descriptors();
   init_pipeline();
+  chunk_manager_ =
+      std::make_unique<ChunkManager>(context_, default_descriptor_pool_);
   generate_mesh();
 }
 
@@ -121,9 +121,7 @@ App::~App()
   vkDestroyCommandPool(context_.device(), upload_context_.command_pool,
                        nullptr);
 
-  destroy_buffer(context_, indirect_buffer_);
-  destroy_buffer(context_, terrain_mesh_.vertex_buffer_);
-
+  chunk_manager_.reset();
   terrain_wireframe_pipeline_.reset();
   terrain_graphics_pipeline_.reset();
   vkDestroyPipelineLayout(context_.device(), terrain_graphics_pipeline_layout_,
@@ -704,12 +702,13 @@ void App::render()
     break;
   };
   static constexpr VkDeviceSize offset = 0;
-  vkCmdBindVertexBuffers(cmd, 0, 1, &terrain_mesh_.vertex_buffer_.buffer,
-                         &offset);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           terrain_graphics_pipeline_layout_, 0, 1,
                           &current_frame_data.global_descriptor, 0, nullptr);
-  vkCmdDrawIndirect(cmd, indirect_buffer_, 0, 1, 0);
+  for (ChunkVertexCache cache : chunk_manager_->vertex_cache()) {
+    vkCmdBindVertexBuffers(cmd, 0, 1, &cache.vertex_buffer.buffer, &offset);
+    vkCmdDrawIndirect(cmd, cache.indirect_buffer, 0, 1, 0);
+  }
 
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
@@ -750,209 +749,7 @@ void App::render()
 
 void App::generate_mesh()
 {
-  vkh::Buffer edge_table_buffer = generate_edge_table_buffer(context_).value();
-  vkh::Buffer triangle_table_buffer =
-      generate_triangle_table_buffer(context_).value();
-
-  static constexpr VkDrawIndirectCommand indirect_command{
-      .vertexCount = 0,
-      .instanceCount = 1,
-      .firstVertex = 0,
-      .firstInstance = 0,
-  };
-  indirect_buffer_ = vkh::create_buffer_from_data(
-                         context_,
-                         {.size = sizeof(VkDrawIndirectCommand),
-                          .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                          .debug_name = "Terrain Indirect Buffer"},
-                         indirect_command)
-                         .value();
-
-  constexpr size_t max_triangles_per_cell = 5;
-  constexpr size_t vertices_per_triangle = 3;
-  constexpr size_t vertex_buffer_size =
-      sizeof(Vertex) * max_triangles_per_cell * vertices_per_triangle *
-      chunk_dimension * chunk_dimension * chunk_dimension * 10;
-  terrain_mesh_.vertex_buffer_ =
-      vkh::create_buffer(context_, {.size = vertex_buffer_size,
-                                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                    .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-                                    .debug_name = "Terrain Vertex Buffer"})
-          .value();
-
-  constexpr uint32_t input_data[] = {1, 2, 3, 4, 5, 6, 7, 8};
-  auto input_buffer =
-      vkh::create_buffer_from_data(context_,
-                                   {.size = beyond::byte_size(input_data),
-                                    .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                                    .debug_name = "Compute Input Buffer"},
-                                   beyond::to_pointer(input_data))
-          .value();
-
-  static constexpr VkDescriptorSetLayoutBinding
-      descriptor_set_layout_bindings[] = {
-          {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
-           nullptr},
-          {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
-           nullptr},
-          {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
-           nullptr},
-          {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
-           nullptr},
-          {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
-           nullptr}};
-
-  static constexpr VkDescriptorSetLayoutCreateInfo
-      descriptorSetLayoutCreateInfo = {
-          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-          .bindingCount = beyond::size(descriptor_set_layout_bindings),
-          .pBindings = beyond::to_pointer(descriptor_set_layout_bindings)};
-
-  VkDescriptorSetLayout descriptor_set_layout{};
-  vkCreateDescriptorSetLayout(context_.device(), &descriptorSetLayoutCreateInfo,
-                              nullptr, &descriptor_set_layout);
-
-  const VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 1,
-      .pSetLayouts = &descriptor_set_layout,
-  };
-  VkPipelineLayout pipeline_layout{};
-  vkCreatePipelineLayout(context_.device(), &pipeline_layout_create_info,
-                         nullptr, &pipeline_layout);
-
-  VkShaderModule module = vkh::load_shader_module_from_file(
-                              context_, "shaders/terrain_meshing.comp.spv",
-                              {.debug_name = "Terrain Meshing Compute Shader"})
-                              .expect("Cannot load terrain_meshing.comp.spv");
-
-  const VkComputePipelineCreateInfo compute_pipeline_create_info{
-      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-      .stage =
-          VkPipelineShaderStageCreateInfo{
-              .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-              .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-              .module = module,
-              .pName = "main",
-          },
-      .layout = pipeline_layout,
-  };
-  VkPipeline compute_pipeline = {};
-  VK_CHECK(vkCreateComputePipelines(context_.device(), {}, 1,
-                                    &compute_pipeline_create_info, nullptr,
-                                    &compute_pipeline));
-  VK_CHECK(vkh::set_debug_name(
-      context_, beyond::bit_cast<uint64_t>(compute_pipeline),
-      VK_OBJECT_TYPE_PIPELINE, "Terrian Meshing Pipeline"));
-
-  const VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = default_descriptor_pool_,
-      .descriptorSetCount = 1,
-      .pSetLayouts = &descriptor_set_layout,
-  };
-  VkDescriptorSet descriptor_set = {};
-  vkAllocateDescriptorSets(context_.device(), &descriptor_set_allocate_info,
-                           &descriptor_set);
-
-  const VkDescriptorBufferInfo indirect_descriptor_buffer_info = {
-      indirect_buffer_, 0, VK_WHOLE_SIZE};
-  const VkDescriptorBufferInfo in_descriptor_buffer_info = {input_buffer, 0,
-                                                            VK_WHOLE_SIZE};
-  const VkDescriptorBufferInfo out_descriptor_buffer_info = {
-      terrain_mesh_.vertex_buffer_, 0, VK_WHOLE_SIZE};
-  const VkDescriptorBufferInfo edge_table_descriptor_buffer_info = {
-      edge_table_buffer, 0, VK_WHOLE_SIZE};
-  const VkDescriptorBufferInfo tri_table_descriptor_buffer_info = {
-      triangle_table_buffer, 0, VK_WHOLE_SIZE};
-
-  const VkWriteDescriptorSet write_descriptor_set[] = {
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 0, 0, 1,
-       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr,
-       &indirect_descriptor_buffer_info, nullptr},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 1, 0, 1,
-       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &in_descriptor_buffer_info,
-       nullptr},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 2, 0, 1,
-       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &out_descriptor_buffer_info,
-       nullptr},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 3, 0, 1,
-       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr,
-       &edge_table_descriptor_buffer_info, nullptr},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptor_set, 4, 0, 1,
-       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr,
-       &tri_table_descriptor_buffer_info, nullptr}};
-  vkUpdateDescriptorSets(context_.device(), beyond::size(write_descriptor_set),
-                         beyond::to_pointer(write_descriptor_set), 0, nullptr);
-
-  const VkCommandPoolCreateInfo compute_command_pool_create_info{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .queueFamilyIndex = context_.compute_queue_family_index()};
-  VkCommandPool compute_command_pool = {};
-  vkCreateCommandPool(context_.device(), &compute_command_pool_create_info,
-                      nullptr, &compute_command_pool);
-
-  const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
-      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr,
-      compute_command_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
-
-  VkCommandBuffer command_buffer{};
-  VK_CHECK(vkAllocateCommandBuffers(
-      context_.device(), &command_buffer_allocate_info, &command_buffer));
-
-  static constexpr VkCommandBufferBeginInfo command_buffer_begin_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-
-  VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info));
-
-  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                    compute_pipeline);
-  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                          pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
-
-  constexpr std::uint32_t local_size = 4;
-  const auto f = chunk_dimension / local_size;
-  vkCmdDispatch(command_buffer, f, f, f);
-  VK_CHECK(vkEndCommandBuffer(command_buffer));
-
-  const VkSubmitInfo submit_info{
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .commandBufferCount = 1,
-      .pCommandBuffers = &command_buffer,
-  };
-
-  static constexpr VkFenceCreateInfo fence_create_info{
-      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      .pNext = nullptr,
-      .flags = 0,
-  };
-  VkFence compute_fence = {};
-  vkCreateFence(context_.device(), &fence_create_info, nullptr, &compute_fence);
-
-  VK_CHECK(
-      vkQueueSubmit(context_.compute_queue(), 1, &submit_info, compute_fence));
-
-  vkWaitForFences(context_.device(), 1, &compute_fence, true, 1e9);
-  vkResetFences(context_.device(), 1, &compute_fence);
-  vkResetCommandPool(context_.device(), compute_command_pool, 0);
-
-  vkDestroyFence(context_.device(), compute_fence, nullptr);
-  vkDestroyCommandPool(context_.device(), compute_command_pool, nullptr);
-  vkDestroyShaderModule(context_.device(), module, nullptr);
-  vkDestroyPipeline(context_.device(), compute_pipeline, nullptr);
-
-  vkDestroyPipelineLayout(context_.device(), pipeline_layout, nullptr);
-  vkDestroyDescriptorSetLayout(context_.device(), descriptor_set_layout,
-                               nullptr);
-  destroy_buffer(context_, input_buffer);
-  destroy_buffer(context_, edge_table_buffer);
-  destroy_buffer(context_, triangle_table_buffer);
+  chunk_manager_->load_chunk();
 }
 
 auto App::get_current_frame() -> FrameData&

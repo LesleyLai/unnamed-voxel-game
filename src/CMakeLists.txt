@@ -74,7 +74,7 @@ add_dependencies(common wireframeVertShader)
 add_dependencies(common wireframeFragShader)
 add_dependencies(common terrainMeshingShader)
 
-add_executable(app "main.cpp" terrain/marching_cube_tables.cpp terrain/marching_cube_tables.hpp)
+add_executable(app "main.cpp" terrain/marching_cube_tables.cpp terrain/marching_cube_tables.hpp terrain/chunk_manager.cpp terrain/chunk_manager.hpp)
 target_link_libraries(app
         PRIVATE common compiler_options)
 add_clangformat(app)

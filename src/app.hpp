@@ -23,6 +23,7 @@
 #include "vulkan_helpers/graphics_pipeline.hpp"
 
 #include "first_person_camera.hpp"
+#include "terrain/chunk_manager.hpp"
 #include "vertex.hpp"
 
 struct GPUCameraData {
@@ -47,10 +48,6 @@ constexpr std::uint32_t frames_in_flight = 2;
 struct AllocatedImage {
   VkImage image{};
   VmaAllocation allocation{};
-};
-
-struct TerrainChunkVertexCache {
-  vkh::Buffer vertex_buffer_;
 };
 
 enum class MouseDraggingState { No, Start, Dragging };
@@ -93,8 +90,7 @@ class App {
   vkh::Pipeline terrain_graphics_pipeline_{};
   vkh::Pipeline terrain_wireframe_pipeline_{};
 
-  TerrainChunkVertexCache terrain_mesh_{};
-  vkh::Buffer indirect_buffer_{};
+  std::unique_ptr<ChunkManager> chunk_manager_{};
 
   FirstPersonCamera camera_{beyond::Vec3(0.0f, 0.0f, 5.0f)};
   MouseDraggingState dragging_ = MouseDraggingState::No;
