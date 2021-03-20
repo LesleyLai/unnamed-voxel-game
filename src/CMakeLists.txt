@@ -42,7 +42,19 @@ add_library(common
         vulkan_helpers/context.hpp
         vulkan_helpers/error_handling.hpp
         vulkan_helpers/graphics_pipeline.cpp
-        vulkan_helpers/graphics_pipeline.hpp vulkan_helpers/deletion_queue.hpp vulkan_helpers/debug_utils.cpp vulkan_helpers/debug_utils.hpp vulkan_helpers/sync.cpp vulkan_helpers/sync.hpp vulkan_helpers/buffer.hpp vulkan_helpers/buffer.cpp vulkan_helpers/unique_resource.hpp vulkan_helpers/descriptor.cpp vulkan_helpers/descriptor.hpp)
+        vulkan_helpers/graphics_pipeline.hpp
+        vulkan_helpers/deletion_queue.hpp
+        vulkan_helpers/debug_utils.cpp
+        vulkan_helpers/debug_utils.hpp
+        vulkan_helpers/sync.cpp
+        vulkan_helpers/sync.hpp
+        vulkan_helpers/buffer.hpp
+        vulkan_helpers/buffer.cpp
+        vulkan_helpers/unique_resource.hpp
+        vulkan_helpers/descriptor_allocator.cpp
+        vulkan_helpers/descriptor_allocator.hpp
+        vulkan_helpers/descriptor_pool.cpp
+        vulkan_helpers/descriptor_pool.hpp)
 target_link_libraries(common
         PUBLIC
         CONAN_PKG::fmt

@@ -88,7 +88,7 @@ create_graphics_pipeline(Context& context,
       .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
   };
 
-  const VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
+  static constexpr VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
       .pNext = nullptr,
       .depthTestEnable = VK_TRUE,

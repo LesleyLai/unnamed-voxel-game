@@ -14,6 +14,7 @@
 #include "vulkan_helpers/sync.hpp"
 
 #include "vulkan_helpers/debug_utils.hpp"
+#include "vulkan_helpers/descriptor_pool.hpp"
 #include "vulkan_helpers/error_handling.hpp"
 
 #include "imgui.h"
@@ -433,7 +434,7 @@ App::~App()
 
   ImGui_ImplVulkan_Shutdown();
 
-  vkDestroyDescriptorPool(context_.device(), descriptor_pool_, nullptr);
+  vkDestroyDescriptorPool(context_.device(), default_descriptor_pool_, nullptr);
   vkDestroyDescriptorSetLayout(context_.device(), global_descriptor_set_layout_,
                                nullptr);
 
@@ -699,30 +700,12 @@ void App::init_sync_strucures()
 
 void App::init_imgui()
 {
-  static constexpr VkDescriptorPoolSize pool_sizes[] = {
-      {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
-      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
-      {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
+  VkDescriptorPool imgui_pool =
+      vkh::create_descriptor_pool(
+          context_, {.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+                     .debug_name = "Imgui Descriptor Pool"})
+          .value();
 
-  static constexpr VkDescriptorPoolCreateInfo pool_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-      .maxSets = 1000,
-      .poolSizeCount = beyond::size(pool_sizes),
-      .pPoolSizes = beyond::to_pointer(pool_sizes),
-  };
-
-  VkDescriptorPool imgui_pool{};
-  VK_CHECK(vkCreateDescriptorPool(context_.device(), &pool_info, nullptr,
-                                  &imgui_pool));
   deletion_queue_.push([=](VkDevice device) {
     vkDestroyDescriptorPool(device, imgui_pool, nullptr);
   });
@@ -769,19 +752,15 @@ void App::init_descriptors()
       .pBindings = &camera_buffer_binding,
   };
 
-  static constexpr VkDescriptorPoolSize pool_sizes[] = {
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10}};
+  static constexpr vkh::PoolSize pool_sizes[] = {
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .multiplier = 1.f}};
 
-  static constexpr VkDescriptorPoolCreateInfo pool_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .flags = 0,
-      .maxSets = 10,
-      .poolSizeCount = beyond::size(pool_sizes),
-      .pPoolSizes = beyond::to_pointer(pool_sizes),
-  };
-
-  vkCreateDescriptorPool(context_.device(), &pool_info, nullptr,
-                         &descriptor_pool_);
+  default_descriptor_pool_ =
+      vkh::create_descriptor_pool(context_,
+                                  {.pool_sizes = pool_sizes,
+                                   .count = 10,
+                                   .debug_name = "Default Descriptor Pool"})
+          .value();
 
   VK_CHECK(vkCreateDescriptorSetLayout(context_.device(),
                                        &set_layout_create_info, nullptr,
@@ -802,7 +781,7 @@ void App::init_descriptors()
     const VkDescriptorSetAllocateInfo alloc_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = nullptr,
-        .descriptorPool = descriptor_pool_,
+        .descriptorPool = default_descriptor_pool_,
         .descriptorSetCount = 1,
         .pSetLayouts = &global_descriptor_set_layout_,
     };
@@ -1177,7 +1156,7 @@ void App::generate_mesh()
 
   const VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = descriptor_pool_,
+      .descriptorPool = default_descriptor_pool_,
       .descriptorSetCount = 1,
       .pSetLayouts = &descriptor_set_layout,
   };

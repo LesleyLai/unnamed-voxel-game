@@ -62,6 +62,7 @@ if (VOXEL_GAME_ENABLE_PCH)
             <cmath>
             <cstddef>
             <type_traits>
+            <span>
             <fmt/format.h>
             )
 endif ()
