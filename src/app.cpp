@@ -465,7 +465,7 @@ void App::init_descriptors()
   default_descriptor_pool_ =
       vkh::create_descriptor_pool(context_,
                                   {.pool_sizes = pool_sizes,
-                                   .count = 10,
+                                   .count = 2000,
                                    .debug_name = "Default Descriptor Pool"})
           .value();
 
@@ -518,11 +518,18 @@ void App::init_descriptors()
 
 void App::init_pipeline()
 {
+  static constexpr VkPushConstantRange push_constant_range{
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .offset = 0,
+      .size = sizeof(beyond::Vec4),
+  };
+
   const VkPipelineLayoutCreateInfo pipeline_layout_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = 1,
       .pSetLayouts = &global_descriptor_set_layout_,
-      .pushConstantRangeCount = 0,
+      .pushConstantRangeCount = 1,
+      .pPushConstantRanges = &push_constant_range,
   };
 
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info,
@@ -634,7 +641,7 @@ void App::render()
                              static_cast<float>(window_extent_.height);
   const beyond::Mat4 view = camera_.get_view_matrix();
   beyond::Mat4 projection =
-      beyond::perspective(beyond::Degree(60.f), aspect_ratio, 0.1f, 200.0f);
+      beyond::perspective(beyond::Degree(60.f), aspect_ratio, 0.1f, 2000.0f);
   projection[1][1] *= -1;
 
   // fill a GPU camera data struct
@@ -706,6 +713,9 @@ void App::render()
                           terrain_graphics_pipeline_layout_, 0, 1,
                           &current_frame_data.global_descriptor, 0, nullptr);
   for (ChunkVertexCache cache : chunk_manager_->vertex_cache()) {
+    vkCmdPushConstants(cmd, terrain_graphics_pipeline_layout_,
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(beyond::Vec4),
+                       &cache.transform);
     vkCmdBindVertexBuffers(cmd, 0, 1, &cache.vertex_buffer.buffer, &offset);
     vkCmdDrawIndirect(cmd, cache.indirect_buffer, 0, 1, 0);
   }
@@ -749,7 +759,13 @@ void App::render()
 
 void App::generate_mesh()
 {
-  chunk_manager_->load_chunk();
+  for (int z = -3; z <= 10; ++z) {
+    for (int x = -5; x <= 5; ++x) {
+      for (int y = -5; y <= 5; ++y) {
+        chunk_manager_->load_chunk(beyond::IVec3{x, z, y});
+      }
+    }
+  }
 }
 
 auto App::get_current_frame() -> FrameData&

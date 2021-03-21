@@ -1,12 +1,14 @@
 #include "chunk_manager.hpp"
 #include "marching_cube_tables.hpp"
-#include <beyond/utils/size.hpp>
-#include <beyond/utils/to_pointer.hpp>
 
 #include "../vertex.hpp"
 #include "../vulkan_helpers/debug_utils.hpp"
 #include "../vulkan_helpers/shader_module.hpp"
 #include "../vulkan_helpers/sync.hpp"
+
+#include <beyond/math/serial.hpp>
+#include <beyond/utils/size.hpp>
+#include <beyond/utils/to_pointer.hpp>
 
 ChunkManager::ChunkManager(vkh::Context& context,
                            VkDescriptorPool descriptor_pool)
@@ -14,7 +16,6 @@ ChunkManager::ChunkManager(vkh::Context& context,
       edge_table_buffer_{generate_edge_table_buffer(context).value()},
       triangle_table_buffer_{generate_triangle_table_buffer(context).value()}
 {
-
   static constexpr VkDescriptorSetLayoutBinding
       descriptor_set_layout_bindings[] = {
           {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
@@ -36,10 +37,18 @@ ChunkManager::ChunkManager(vkh::Context& context,
                               &descriptor_set_layout_create_info, nullptr,
                               &descriptor_set_layout_);
 
+  const VkPushConstantRange push_constant_range{
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .offset = 0,
+      .size = sizeof(beyond::Vec4),
+  };
+
   const VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = 1,
       .pSetLayouts = &descriptor_set_layout_,
+      .pushConstantRangeCount = 1,
+      .pPushConstantRanges = &push_constant_range,
   };
   vkCreatePipelineLayout(context_.device(), &pipeline_layout_create_info,
                          nullptr, &meshing_pipeline_layout_);
@@ -98,7 +107,7 @@ ChunkManager::~ChunkManager()
   vkh::destroy_buffer(context_, edge_table_buffer_);
 }
 
-void ChunkManager::load_chunk()
+void ChunkManager::load_chunk(beyond::IVec3 position)
 {
   static constexpr VkDrawIndirectCommand indirect_command{
       .vertexCount = 0,
@@ -113,7 +122,8 @@ void ChunkManager::load_chunk()
            .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
            .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-           .debug_name = "Terrain Indirect Buffer"},
+           .debug_name =
+               fmt::format("Chunk Indirect Buffer {}", position).c_str()},
           indirect_command)
           .value();
 
@@ -121,15 +131,23 @@ void ChunkManager::load_chunk()
   constexpr size_t vertices_per_triangle = 3;
   constexpr size_t vertex_buffer_size =
       sizeof(Vertex) * max_triangles_per_cell * vertices_per_triangle *
-      chunk_dimension * chunk_dimension * chunk_dimension * 10;
+      chunk_dimension * chunk_dimension * chunk_dimension;
 
   vkh::Buffer vertex_buffer =
-      vkh::create_buffer(context_, {.size = vertex_buffer_size,
-                                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                    .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-                                    .debug_name = "Terrain Vertex Buffer"})
+      vkh::create_buffer(
+          context_,
+          {.size = vertex_buffer_size,
+           .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+           .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+           .debug_name =
+               fmt::format("Chunk Vertex Buffer {}", position).c_str()})
           .value();
+
+  const auto chunk_x = static_cast<float>(chunk_dimension * position.x);
+  const auto chunk_y = static_cast<float>(chunk_dimension * position.y);
+  const auto chunk_z = static_cast<float>(chunk_dimension * position.z);
+  beyond::Vec4 transform{chunk_x, chunk_y, chunk_z, 1.f};
 
   const VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -138,8 +156,8 @@ void ChunkManager::load_chunk()
       .pSetLayouts = &descriptor_set_layout_,
   };
   VkDescriptorSet descriptor_set = {};
-  vkAllocateDescriptorSets(context_.device(), &descriptor_set_allocate_info,
-                           &descriptor_set);
+  VK_CHECK(vkAllocateDescriptorSets(
+      context_.device(), &descriptor_set_allocate_info, &descriptor_set));
 
   const VkDescriptorBufferInfo indirect_descriptor_buffer_info = {
       indirect_buffer, 0, VK_WHOLE_SIZE};
@@ -186,6 +204,9 @@ void ChunkManager::load_chunk()
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                           meshing_pipeline_layout_, 0, 1, &descriptor_set, 0,
                           nullptr);
+  vkCmdPushConstants(command_buffer, meshing_pipeline_layout_,
+                     VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(beyond::Vec4),
+                     &transform);
 
   constexpr std::uint32_t local_size = 4;
   constexpr auto dispatch_size = chunk_dimension / local_size;
@@ -205,5 +226,15 @@ void ChunkManager::load_chunk()
   vkResetFences(context_.device(), 1, &meshing_fence_);
   vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
 
-  vertex_cache_.emplace_back(vertex_buffer, indirect_buffer);
+  auto* indirect_buffer_data =
+      context_.map<VkDrawIndirectCommand>(indirect_buffer).value();
+  bool is_empty_chunk = indirect_buffer_data->vertexCount == 0;
+  context_.unmap(indirect_buffer);
+
+  if (is_empty_chunk) {
+    vkh::destroy_buffer(context_, vertex_buffer);
+    vkh::destroy_buffer(context_, indirect_buffer);
+  } else {
+    vertex_cache_.emplace_back(vertex_buffer, indirect_buffer, transform);
+  }
 }

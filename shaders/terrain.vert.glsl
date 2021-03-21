@@ -9,6 +9,11 @@ layout(set = 0, binding = 0) uniform CameraBuffer {
     mat4 viewproj;
 } cameraData;
 
+layout( push_constant ) uniform constants
+{
+    vec4 transform;
+} PushConstants;
+
 layout (location = 0) out VS_OUT {
     vec3 position;
     vec3 normal;
@@ -16,7 +21,8 @@ layout (location = 0) out VS_OUT {
 
 void main()
 {
-    gl_Position = cameraData.viewproj * vec4(vPosition.xyz, 1.0f);
-    vs_out.position = vPosition.xyz;
+    vec3 world_position = PushConstants.transform.xyz + vPosition.xyz;
+    gl_Position = cameraData.viewproj * vec4(world_position, 1.0f);
+    vs_out.position = world_position;
     vs_out.normal = vNormal.xyz;
 }

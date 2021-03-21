@@ -6,6 +6,11 @@ const int chunk_dimension = 32;
 const int half_chunk_dimension = chunk_dimension / 2;
 layout (local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
+layout( push_constant ) uniform constants
+{
+  vec4 transform;
+} PushConstants;
+
 layout(binding = 0) buffer indirect_buffer
 {
   uint    vertexCount;
@@ -74,7 +79,7 @@ float perlin(vec3 x) {
 
 // Fractal Brownian Motion
 float fbm6(vec3 x) {
-  const int noise_octaves_count = 6;
+  const int noise_octaves_count = 9;
   float v = 0.0;
   float a = 0.5;
   vec3 shift = vec3(100);
@@ -87,7 +92,7 @@ float fbm6(vec3 x) {
 }
 
 float noise(vec3 pt) {
-  return fbm6(pt / 10.) - 0.5 - pt.y * 0.05;
+  return fbm6(pt / 20.) - 0.5 - pt.y * 0.01;
 }
 
 float inverse_lerp(float a, float b, float v) {
@@ -178,7 +183,7 @@ void main(){
   for (int i = 0; i < 8; ++i) {
     vec3 corner_point = voxel_center + corner_offsets[i];
     cell.p[i] = corner_point;
-    cell.val[i] = noise(corner_point);
+    cell.val[i] = noise(corner_point + PushConstants.transform.xyz);
   }
 
   polygonize(cell, 0);

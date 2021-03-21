@@ -4,11 +4,14 @@
 #include "../vulkan_helpers/buffer.hpp"
 #include "../vulkan_helpers/context.hpp"
 
+#include <beyond/math/vector.hpp>
+
 #include <span>
 
 struct ChunkVertexCache {
   vkh::Buffer vertex_buffer{};
   vkh::Buffer indirect_buffer{};
+  beyond::Vec4 transform; // x, y, z for translation, w for scaling
 };
 
 class ChunkManager {
@@ -37,7 +40,7 @@ public:
   ChunkManager(ChunkManager&&) noexcept = delete;
   auto operator=(ChunkManager&&) & noexcept -> ChunkManager& = delete;
 
-  void load_chunk();
+  void load_chunk(beyond::IVec3 position);
 
   [[nodiscard]] auto vertex_cache() -> std::span<ChunkVertexCache>
   {
