@@ -2,6 +2,7 @@
 #include "marching_cube_tables.hpp"
 
 #include "../vertex.hpp"
+#include "../vulkan_helpers/commands.hpp"
 #include "../vulkan_helpers/debug_utils.hpp"
 #include "../vulkan_helpers/descriptor_pool.hpp"
 #include "../vulkan_helpers/shader_module.hpp"
@@ -196,18 +197,13 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
   vkUpdateDescriptorSets(context_.device(), beyond::size(write_descriptor_set),
                          beyond::to_pointer(write_descriptor_set), 0, nullptr);
 
-  const VkCommandBufferAllocateInfo meshing_command_buffer_allocate_info = {
-      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr,
-      meshing_command_pool_, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
-
-  VkCommandBuffer meshing_command_buffer{};
-  VK_CHECK(vkAllocateCommandBuffers(context_.device(),
-                                    &meshing_command_buffer_allocate_info,
-                                    &meshing_command_buffer));
-  VK_CHECK(vkh::set_debug_name(
-      context_, beyond::bit_cast<uint64_t>(meshing_command_buffer),
-      VK_OBJECT_TYPE_COMMAND_BUFFER,
-      fmt::format("Meshing command buffer at {}", position).c_str()));
+  VkCommandBuffer meshing_command_buffer =
+      vkh::allocate_command_buffer(
+          context_,
+          {.command_pool = meshing_command_pool_,
+           .debug_name =
+               fmt::format("Meshing command buffer at {}", position).c_str()})
+          .value();
 
   static constexpr VkCommandBufferBeginInfo command_buffer_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -267,18 +263,13 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
            .debug_name = fmt::format("Terrain chunk at {}", position).c_str()})
           .value();
 
-  const VkCommandBufferAllocateInfo transfer_command_buffer_allocate_info = {
-      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr,
-      meshing_command_pool_, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
-
-  VkCommandBuffer transfer_command_buffer{};
-  VK_CHECK(vkAllocateCommandBuffers(context_.device(),
-                                    &transfer_command_buffer_allocate_info,
-                                    &transfer_command_buffer));
-  VK_CHECK(vkh::set_debug_name(
-      context_, beyond::bit_cast<uint64_t>(transfer_command_buffer),
-      VK_OBJECT_TYPE_COMMAND_BUFFER,
-      fmt::format("Transfer command buffer at {}", position).c_str()));
+  VkCommandBuffer transfer_command_buffer =
+      vkh::allocate_command_buffer(
+          context_,
+          {.command_pool = meshing_command_pool_,
+           .debug_name =
+               fmt::format("Transfer command buffer at {}", position).c_str()})
+          .value();
 
   VK_CHECK(vkBeginCommandBuffer(transfer_command_buffer,
                                 &command_buffer_begin_info));
