@@ -164,14 +164,17 @@ ChunkManager::~ChunkManager()
   vkh::destroy_buffer(context_, edge_table_buffer_);
 }
 
-void ChunkManager::load_chunk(beyond::IVec3 position)
+[[nodiscard]] auto
+ChunkManager::calculate_chunk_transform(beyond::IVec3 position) -> beyond::Vec4
 {
-
   const auto chunk_x = static_cast<float>(chunk_dimension * position.x);
   const auto chunk_y = static_cast<float>(chunk_dimension * position.y);
   const auto chunk_z = static_cast<float>(chunk_dimension * position.z);
-  beyond::Vec4 transform{chunk_x, chunk_y, chunk_z, 1.f};
+  return beyond::Vec4{chunk_x, chunk_y, chunk_z, 1.f};
+}
 
+void ChunkManager::update_write_descriptor_set()
+{
   const VkDescriptorBufferInfo indirect_descriptor_buffer_info = {
       terrain_reduced_scratch_buffer_, 0, VK_WHOLE_SIZE};
   const VkDescriptorBufferInfo out_descriptor_buffer_info = {
@@ -196,6 +199,11 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
        &tri_table_descriptor_buffer_info, nullptr}};
   vkUpdateDescriptorSets(context_.device(), beyond::size(write_descriptor_set),
                          beyond::to_pointer(write_descriptor_set), 0, nullptr);
+}
+
+void ChunkManager::generate_chunk_mesh(beyond::IVec3 position)
+{
+  const beyond::Vec4 transform = calculate_chunk_transform(position);
 
   VkCommandBuffer meshing_command_buffer =
       vkh::allocate_command_buffer(
@@ -238,19 +246,12 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
 
   vkWaitForFences(context_.device(), 1, &meshing_fence_, true, 1e9);
   vkResetFences(context_.device(), 1, &meshing_fence_);
+}
 
-  const std::uint32_t vertex_count = [&]() {
-    auto* indirect_buffer_data =
-        context_.map<TerrainReducedBuffer>(terrain_reduced_scratch_buffer_)
-            .value();
-    std::uint32_t result = indirect_buffer_data->vertex_count;
-    indirect_buffer_data->vertex_count = 0;
-    context_.unmap(terrain_reduced_scratch_buffer_);
-    return result;
-  }();
-  const bool is_empty_chunk = vertex_count == 0;
-
-  if (is_empty_chunk) { return; }
+[[nodiscard]] auto ChunkManager::copy_mesh_from_scratch_buffer(
+    uint32_t vertex_count, beyond::IVec3 position) -> ChunkVertexCache
+{
+  const beyond::Vec4 transform = calculate_chunk_transform(position);
 
   const std::uint32_t vertex_buffer_size = vertex_count * sizeof(Vertex);
   vkh::Buffer vertex_buffer =
@@ -270,6 +271,11 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
            .debug_name =
                fmt::format("Transfer command buffer at {}", position).c_str()})
           .value();
+
+  static constexpr VkCommandBufferBeginInfo command_buffer_begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
 
   VK_CHECK(vkBeginCommandBuffer(transfer_command_buffer,
                                 &command_buffer_begin_info));
@@ -293,7 +299,38 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
 
   vkWaitForFences(context_.device(), 1, &meshing_fence_, true, 1e9);
   vkResetFences(context_.device(), 1, &meshing_fence_);
-  vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
 
-  vertex_cache_.emplace_back(vertex_buffer, vertex_count, transform);
+  return ChunkVertexCache{
+      .vertex_buffer = vertex_buffer,
+      .vertex_count = vertex_count,
+      .transform = transform,
+  };
+}
+
+[[nodiscard]] auto ChunkManager::get_vertex_count() -> uint32_t
+{
+  auto* indirect_buffer_data =
+      context_.map<TerrainReducedBuffer>(terrain_reduced_scratch_buffer_)
+          .value();
+  std::uint32_t count = indirect_buffer_data->vertex_count;
+  indirect_buffer_data->vertex_count = 0;
+  context_.unmap(terrain_reduced_scratch_buffer_);
+  return count;
+}
+
+void ChunkManager::load_chunk(beyond::IVec3 position)
+{
+  update_write_descriptor_set();
+
+  generate_chunk_mesh(position);
+
+  const uint32_t vertex_count = get_vertex_count();
+  const bool is_empty_chunk = vertex_count == 0;
+
+  if (is_empty_chunk) { return; }
+
+  ChunkVertexCache vertex_cache =
+      copy_mesh_from_scratch_buffer(vertex_count, position);
+  vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
+  vertex_cache_.push_back(std::move(vertex_cache));
 }

@@ -49,6 +49,15 @@ public:
   {
     return vertex_cache_;
   }
+
+private:
+  static auto calculate_chunk_transform(beyond::IVec3 position) -> beyond::Vec4;
+  void update_write_descriptor_set();
+  void generate_chunk_mesh(beyond::IVec3 position);
+  auto get_vertex_count() -> uint32_t;
+  auto copy_mesh_from_scratch_buffer(uint32_t vertex_count,
+                                     beyond::IVec3 position)
+      -> ChunkVertexCache;
 };
 
 #endif // VOXEL_GAME_TERRAIN_CHUNK_MANAGER_HPP
