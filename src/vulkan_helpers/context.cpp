@@ -138,6 +138,7 @@ Context::Context(vkh::Context&& other) noexcept
 auto Context::operator=(Context&& other) & noexcept -> Context&
 {
   if (this != &other) {
+    this->~Context();
     instance_ = std::exchange(other.instance_, {});
     debug_messenger_ = std::exchange(other.debug_messenger_, {});
     surface_ = std::exchange(other.surface_, {});

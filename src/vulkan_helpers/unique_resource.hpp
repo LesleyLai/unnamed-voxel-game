@@ -39,7 +39,6 @@ public:
       device_ = std::exchange(other.device_, nullptr);
       resource_ = std::exchange(other.resource_, nullptr);
     }
-
     return *this;
   }
 

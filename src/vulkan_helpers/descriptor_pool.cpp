@@ -2,20 +2,7 @@
 #include "context.hpp"
 #include "debug_utils.hpp"
 
-#include <algorithm>
-#include <beyond/container/static_vector.hpp>
-#include <iterator>
-
-namespace {
-
-constexpr auto to_vkDescriptorPoolSize(vkh::PoolSize size, std::uint32_t count)
-{
-  return VkDescriptorPoolSize{.type = size.type,
-                              .descriptorCount = static_cast<std::uint32_t>(
-                                  size.multiplier * static_cast<float>(count))};
-}
-
-} // namespace
+#include <beyond/utils/bit_cast.hpp>
 
 namespace vkh {
 
@@ -23,19 +10,14 @@ auto create_descriptor_pool(Context& context,
                             const DescriptorPoolCreateInfo& create_info)
     -> Expected<VkDescriptorPool>
 {
-  beyond::StaticVector<VkDescriptorPoolSize, 24> sizes;
-  BEYOND_ENSURE(sizes.capacity() >= create_info.pool_sizes.size());
-  std::ranges::transform(
-      create_info.pool_sizes, std::back_inserter(sizes), [&](PoolSize size) {
-        return to_vkDescriptorPoolSize(size, create_info.count);
-      });
 
   const VkDescriptorPoolCreateInfo pool_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .flags = create_info.flags,
-      .maxSets = create_info.count,
-      .poolSizeCount = sizes.size(),
-      .pPoolSizes = sizes.data(),
+      .maxSets = create_info.max_sets,
+      .poolSizeCount =
+          static_cast<std::uint32_t>(create_info.pool_sizes.size()),
+      .pPoolSizes = create_info.pool_sizes.data(),
   };
 
   VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;

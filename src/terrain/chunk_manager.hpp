@@ -16,24 +16,24 @@ struct ChunkVertexCache {
 
 class ChunkManager {
   vkh::Context& context_;
+
   VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
+  VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
+  VkPipelineLayout meshing_pipeline_layout_ = VK_NULL_HANDLE;
+  VkPipeline meshing_pipeline_ = VK_NULL_HANDLE;
+  VkCommandPool meshing_command_pool_ = VK_NULL_HANDLE;
+  VkFence meshing_fence_ = VK_NULL_HANDLE;
 
   vkh::Buffer edge_table_buffer_;
   vkh::Buffer triangle_table_buffer_;
 
   std::vector<ChunkVertexCache> vertex_cache_;
 
-  VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
-  VkPipelineLayout meshing_pipeline_layout_ = VK_NULL_HANDLE;
-  VkPipeline meshing_pipeline_ = VK_NULL_HANDLE;
-  VkCommandPool meshing_command_pool_ = VK_NULL_HANDLE;
-  VkFence meshing_fence_ = VK_NULL_HANDLE;
-
 public:
   static constexpr int chunk_dimension = 32;
 
-  explicit ChunkManager(vkh::Context& context,
-                        VkDescriptorPool descriptor_pool);
+  explicit ChunkManager(vkh::Context& context);
   ~ChunkManager();
   ChunkManager(const ChunkManager&) = delete;
   auto operator=(const ChunkManager&) & -> ChunkManager& = delete;

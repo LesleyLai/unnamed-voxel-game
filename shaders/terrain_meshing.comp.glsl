@@ -78,7 +78,7 @@ float perlin(vec3 x) {
 }
 
 // Fractal Brownian Motion
-float fbm6(vec3 x) {
+float fbm(vec3 x) {
   const int noise_octaves_count = 9;
   float v = 0.0;
   float a = 0.5;
@@ -92,7 +92,7 @@ float fbm6(vec3 x) {
 }
 
 float noise(vec3 pt) {
-  return fbm6(pt / 20.) - 0.5 - pt.y * 0.01;
+  return fbm(pt / 20.) - 0.5 - pt.y * 0.01;
 }
 
 float inverse_lerp(float a, float b, float v) {

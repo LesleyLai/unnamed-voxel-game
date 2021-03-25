@@ -3,6 +3,7 @@
 
 #include "../vertex.hpp"
 #include "../vulkan_helpers/debug_utils.hpp"
+#include "../vulkan_helpers/descriptor_pool.hpp"
 #include "../vulkan_helpers/shader_module.hpp"
 #include "../vulkan_helpers/sync.hpp"
 
@@ -10,12 +11,21 @@
 #include <beyond/utils/size.hpp>
 #include <beyond/utils/to_pointer.hpp>
 
-ChunkManager::ChunkManager(vkh::Context& context,
-                           VkDescriptorPool descriptor_pool)
-    : context_{context}, descriptor_pool_{descriptor_pool},
+ChunkManager::ChunkManager(vkh::Context& context)
+    : context_{context},
       edge_table_buffer_{generate_edge_table_buffer(context).value()},
       triangle_table_buffer_{generate_triangle_table_buffer(context).value()}
 {
+  const VkDescriptorPoolSize pool_sizes[] = {
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4}};
+
+  descriptor_pool_ =
+      vkh::create_descriptor_pool(
+          context_, {.max_sets = 1,
+                     .pool_sizes = pool_sizes,
+                     .debug_name = "Terrain Chunk Descriptor Pool"})
+          .value();
+
   static constexpr VkDescriptorSetLayoutBinding
       descriptor_set_layout_bindings[] = {
           {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT,
@@ -36,6 +46,16 @@ ChunkManager::ChunkManager(vkh::Context& context,
   vkCreateDescriptorSetLayout(context_.device(),
                               &descriptor_set_layout_create_info, nullptr,
                               &descriptor_set_layout_);
+
+  const VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = descriptor_pool_,
+      .descriptorSetCount = 1,
+      .pSetLayouts = &descriptor_set_layout_,
+  };
+  descriptor_set = {};
+  VK_CHECK(vkAllocateDescriptorSets(
+      context_.device(), &descriptor_set_allocate_info, &descriptor_set));
 
   const VkPushConstantRange push_constant_range{
       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -97,6 +117,7 @@ ChunkManager::~ChunkManager()
   vkDestroyPipelineLayout(context_.device(), meshing_pipeline_layout_, nullptr);
   vkDestroyDescriptorSetLayout(context_.device(), descriptor_set_layout_,
                                nullptr);
+  vkDestroyDescriptorPool(context_.device(), descriptor_pool_, nullptr);
 
   for (auto cache : vertex_cache_) {
     vkh::destroy_buffer(context_, cache.vertex_buffer);
@@ -148,16 +169,6 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
   const auto chunk_y = static_cast<float>(chunk_dimension * position.y);
   const auto chunk_z = static_cast<float>(chunk_dimension * position.z);
   beyond::Vec4 transform{chunk_x, chunk_y, chunk_z, 1.f};
-
-  const VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = descriptor_pool_,
-      .descriptorSetCount = 1,
-      .pSetLayouts = &descriptor_set_layout_,
-  };
-  VkDescriptorSet descriptor_set = {};
-  VK_CHECK(vkAllocateDescriptorSets(
-      context_.device(), &descriptor_set_allocate_info, &descriptor_set));
 
   const VkDescriptorBufferInfo indirect_descriptor_buffer_info = {
       indirect_buffer, 0, VK_WHOLE_SIZE};

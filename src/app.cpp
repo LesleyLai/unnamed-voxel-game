@@ -106,8 +106,7 @@ App::App() : window_manager_{&WindowManager::instance()}
   init_imgui();
   init_descriptors();
   init_pipeline();
-  chunk_manager_ =
-      std::make_unique<ChunkManager>(context_, default_descriptor_pool_);
+  chunk_manager_ = std::make_unique<ChunkManager>(context_);
   generate_mesh();
 }
 
@@ -401,20 +400,37 @@ void App::init_sync_strucures()
             {.debug_name = fmt::format("present Fence ({})", i).c_str()})
             .value();
     frame_data.render_fence =
-        vkh::create_fence(context_, {.debug_name = "Upload Fence"}).value();
+        vkh::create_fence(context_, {.flags = VK_FENCE_CREATE_SIGNALED_BIT,
+                                     .debug_name = "Upload Fence"})
+            .value();
   }
 }
 
 void App::init_imgui()
 {
+  VkDescriptorPoolSize pool_sizes[] = {
+      {VK_DESCRIPTOR_TYPE_SAMPLER, 100},
+      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 100},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 100},
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 100},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 100},
+      {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 100},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 100},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 100},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 100},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 100},
+      {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 100}};
+
   VkDescriptorPool imgui_pool =
       vkh::create_descriptor_pool(
           context_, {.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+                     .max_sets = 100,
+                     .pool_sizes = pool_sizes,
                      .debug_name = "Imgui Descriptor Pool"})
           .value();
 
-  deletion_queue_.push([=](VkDevice device) {
-    vkDestroyDescriptorPool(device, imgui_pool, nullptr);
+  deletion_queue_.push([=](vkh::Context& context) {
+    vkDestroyDescriptorPool(context, imgui_pool, nullptr);
   });
 
   ImGui::CreateContext();
@@ -459,13 +475,13 @@ void App::init_descriptors()
       .pBindings = &camera_buffer_binding,
   };
 
-  static constexpr vkh::PoolSize pool_sizes[] = {
-      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .multiplier = 1.f}};
+  static constexpr VkDescriptorPoolSize pool_sizes[] = {
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 10}};
 
   default_descriptor_pool_ =
       vkh::create_descriptor_pool(context_,
-                                  {.pool_sizes = pool_sizes,
-                                   .count = 2000,
+                                  {.max_sets = 1000,
+                                   .pool_sizes = pool_sizes,
                                    .debug_name = "Default Descriptor Pool"})
           .value();
 

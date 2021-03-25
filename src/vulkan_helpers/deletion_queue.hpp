@@ -11,12 +11,12 @@
 namespace vkh {
 
 class DeletionQueue {
-  std::vector<std::function<void(VkDevice)>> deleters_;
-  VkDevice device_{};
+  std::vector<std::function<void(Context&)>> deleters_;
+  Context* context_ = nullptr;
 
 public:
   DeletionQueue() = default;
-  explicit DeletionQueue(Context& context) : device_{context.device()} {}
+  explicit DeletionQueue(Context& context) : context_{&context} {}
 
   ~DeletionQueue()
   {
@@ -27,14 +27,14 @@ public:
   auto operator=(const DeletionQueue&) & -> DeletionQueue& = delete;
   DeletionQueue(DeletionQueue&& other) noexcept
       : deleters_(std::exchange(other.deleters_, {})),
-        device_(std::exchange(other.device_, {}))
+        context_(std::exchange(other.context_, {}))
   {
   }
   auto operator=(DeletionQueue&& other) & noexcept -> DeletionQueue&
   {
     if (this != &other) {
       deleters_ = std::exchange(other.deleters_, {});
-      device_ = std::exchange(other.device_, {});
+      context_ = std::exchange(other.context_, {});
     }
     return *this;
   }
@@ -47,7 +47,7 @@ public:
   void flush()
   {
     for (auto& deleter : deleters_) {
-      deleter(device_);
+      deleter(*context_);
     }
     deleters_.clear();
   }

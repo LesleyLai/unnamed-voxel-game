@@ -10,6 +10,7 @@ namespace vkh {
 class Context;
 
 struct FenceCreateInfo {
+  VkFenceCreateFlags flags = {};
   const char* debug_name = nullptr;
 };
 

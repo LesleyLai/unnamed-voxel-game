@@ -15,7 +15,7 @@ namespace vkh {
   const VkFenceCreateInfo fence_create_info{
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
       .pNext = nullptr,
-      .flags = 0,
+      .flags = create_info.flags,
   };
 
   VkFence fence = {};
