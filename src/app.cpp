@@ -741,7 +741,7 @@ void App::render()
   VK_CHECK(vkQueueSubmit(context_.graphics_queue(), 1, &submit_info,
                          current_frame_data.render_fence));
 
-  const VkSwapchainKHR swapchain = swapchain_.get();
+  VkSwapchainKHR swapchain = swapchain_.get();
   const VkPresentInfoKHR present_info = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .pNext = nullptr,

@@ -28,6 +28,8 @@ class ChunkManager {
   vkh::Buffer edge_table_buffer_;
   vkh::Buffer triangle_table_buffer_;
 
+  vkh::Buffer terrain_vertex_scratch_buffer_;
+
   std::vector<ChunkVertexCache> vertex_cache_;
 
 public:

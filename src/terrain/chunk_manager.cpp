@@ -107,6 +107,22 @@ ChunkManager::ChunkManager(vkh::Context& context)
                                &meshing_command_pool_));
   meshing_fence_ =
       vkh::create_fence(context_, {.debug_name = "Meshing Fence"}).value();
+
+  constexpr size_t max_triangles_per_cell = 5;
+  constexpr size_t vertices_per_triangle = 3;
+  constexpr size_t max_vertex_count = max_triangles_per_cell *
+                                      vertices_per_triangle * chunk_dimension *
+                                      chunk_dimension * chunk_dimension;
+  constexpr size_t vertex_buffer_size = sizeof(Vertex) * max_vertex_count;
+
+  terrain_vertex_scratch_buffer_ =
+      vkh::create_buffer(context_,
+                         {.size = vertex_buffer_size,
+                          .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                                   VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                          .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+                          .debug_name = "Terrain Vertex Scratch Buffer"})
+          .value();
 }
 
 ChunkManager::~ChunkManager()
@@ -124,6 +140,7 @@ ChunkManager::~ChunkManager()
     vkh::destroy_buffer(context_, cache.indirect_buffer);
   }
 
+  vkh::destroy_buffer(context_, terrain_vertex_scratch_buffer_);
   vkh::destroy_buffer(context_, triangle_table_buffer_);
   vkh::destroy_buffer(context_, edge_table_buffer_);
 }
@@ -148,23 +165,6 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
           indirect_command)
           .value();
 
-  constexpr size_t max_triangles_per_cell = 5;
-  constexpr size_t vertices_per_triangle = 3;
-  constexpr size_t vertex_buffer_size =
-      sizeof(Vertex) * max_triangles_per_cell * vertices_per_triangle *
-      chunk_dimension * chunk_dimension * chunk_dimension;
-
-  vkh::Buffer vertex_buffer =
-      vkh::create_buffer(
-          context_,
-          {.size = vertex_buffer_size,
-           .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-           .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-           .debug_name =
-               fmt::format("Chunk Vertex Buffer {}", position).c_str()})
-          .value();
-
   const auto chunk_x = static_cast<float>(chunk_dimension * position.x);
   const auto chunk_y = static_cast<float>(chunk_dimension * position.y);
   const auto chunk_z = static_cast<float>(chunk_dimension * position.z);
@@ -172,8 +172,8 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
 
   const VkDescriptorBufferInfo indirect_descriptor_buffer_info = {
       indirect_buffer, 0, VK_WHOLE_SIZE};
-  const VkDescriptorBufferInfo out_descriptor_buffer_info = {vertex_buffer, 0,
-                                                             VK_WHOLE_SIZE};
+  const VkDescriptorBufferInfo out_descriptor_buffer_info = {
+      terrain_vertex_scratch_buffer_, 0, VK_WHOLE_SIZE};
   const VkDescriptorBufferInfo edge_table_descriptor_buffer_info = {
       edge_table_buffer_, 0, VK_WHOLE_SIZE};
   const VkDescriptorBufferInfo tri_table_descriptor_buffer_info = {
@@ -195,57 +195,114 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
   vkUpdateDescriptorSets(context_.device(), beyond::size(write_descriptor_set),
                          beyond::to_pointer(write_descriptor_set), 0, nullptr);
 
-  const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+  const VkCommandBufferAllocateInfo meshing_command_buffer_allocate_info = {
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr,
       meshing_command_pool_, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
 
-  VkCommandBuffer command_buffer{};
-  VK_CHECK(vkAllocateCommandBuffers(
-      context_.device(), &command_buffer_allocate_info, &command_buffer));
+  VkCommandBuffer meshing_command_buffer{};
+  VK_CHECK(vkAllocateCommandBuffers(context_.device(),
+                                    &meshing_command_buffer_allocate_info,
+                                    &meshing_command_buffer));
+  VK_CHECK(vkh::set_debug_name(
+      context_, beyond::bit_cast<uint64_t>(meshing_command_buffer),
+      VK_OBJECT_TYPE_COMMAND_BUFFER,
+      fmt::format("Meshing command buffer at {}", position).c_str()));
 
   static constexpr VkCommandBufferBeginInfo command_buffer_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
   };
 
-  VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info));
+  VK_CHECK(
+      vkBeginCommandBuffer(meshing_command_buffer, &command_buffer_begin_info));
 
-  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+  vkCmdBindPipeline(meshing_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                     meshing_pipeline_);
-  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                          meshing_pipeline_layout_, 0, 1, &descriptor_set, 0,
-                          nullptr);
-  vkCmdPushConstants(command_buffer, meshing_pipeline_layout_,
+  vkCmdBindDescriptorSets(
+      meshing_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+      meshing_pipeline_layout_, 0, 1, &descriptor_set, 0, nullptr);
+  vkCmdPushConstants(meshing_command_buffer, meshing_pipeline_layout_,
                      VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(beyond::Vec4),
                      &transform);
 
   constexpr std::uint32_t local_size = 4;
   constexpr auto dispatch_size = chunk_dimension / local_size;
-  vkCmdDispatch(command_buffer, dispatch_size, dispatch_size, dispatch_size);
-  VK_CHECK(vkEndCommandBuffer(command_buffer));
+  vkCmdDispatch(meshing_command_buffer, dispatch_size, dispatch_size,
+                dispatch_size);
+  VK_CHECK(vkEndCommandBuffer(meshing_command_buffer));
 
-  const VkSubmitInfo submit_info{
+  const VkSubmitInfo meshing_submit_info{
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .commandBufferCount = 1,
-      .pCommandBuffers = &command_buffer,
+      .pCommandBuffers = &meshing_command_buffer,
   };
+  VK_CHECK(vkQueueSubmit(context_.compute_queue(), 1, &meshing_submit_info,
+                         meshing_fence_));
 
-  VK_CHECK(
-      vkQueueSubmit(context_.compute_queue(), 1, &submit_info, meshing_fence_));
+  vkWaitForFences(context_.device(), 1, &meshing_fence_, true, 1e9);
+  vkResetFences(context_.device(), 1, &meshing_fence_);
+
+  const std::uint32_t vertex_count = [&]() {
+    auto* indirect_buffer_data =
+        context_.map<VkDrawIndirectCommand>(indirect_buffer).value();
+    std::uint32_t result = indirect_buffer_data->vertexCount;
+    context_.unmap(indirect_buffer);
+    return result;
+  }();
+  const bool is_empty_chunk = vertex_count == 0;
+
+  if (is_empty_chunk) {
+    vkh::destroy_buffer(context_, indirect_buffer);
+    return;
+  }
+
+  const std::uint32_t vertex_buffer_size = vertex_count * sizeof(Vertex);
+  vkh::Buffer vertex_buffer =
+      vkh::create_buffer(
+          context_,
+          {.size = vertex_buffer_size,
+           .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+           .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+           .debug_name = fmt::format("Terrain chunk at {}", position).c_str()})
+          .value();
+
+  const VkCommandBufferAllocateInfo transfer_command_buffer_allocate_info = {
+      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr,
+      meshing_command_pool_, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
+
+  VkCommandBuffer transfer_command_buffer{};
+  VK_CHECK(vkAllocateCommandBuffers(context_.device(),
+                                    &transfer_command_buffer_allocate_info,
+                                    &transfer_command_buffer));
+  VK_CHECK(vkh::set_debug_name(
+      context_, beyond::bit_cast<uint64_t>(transfer_command_buffer),
+      VK_OBJECT_TYPE_COMMAND_BUFFER,
+      fmt::format("Transfer command buffer at {}", position).c_str()));
+
+  VK_CHECK(vkBeginCommandBuffer(transfer_command_buffer,
+                                &command_buffer_begin_info));
+
+  const VkBufferCopy buffer_copy{
+      .srcOffset = 0,
+      .dstOffset = 0,
+      .size = vertex_buffer_size,
+  };
+  vkCmdCopyBuffer(transfer_command_buffer, terrain_vertex_scratch_buffer_,
+                  vertex_buffer, 1, &buffer_copy);
+  VK_CHECK(vkEndCommandBuffer(transfer_command_buffer));
+
+  const VkSubmitInfo transfer_submit_info{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &transfer_command_buffer,
+  };
+  VK_CHECK(vkQueueSubmit(context_.compute_queue(), 1, &transfer_submit_info,
+                         meshing_fence_));
 
   vkWaitForFences(context_.device(), 1, &meshing_fence_, true, 1e9);
   vkResetFences(context_.device(), 1, &meshing_fence_);
   vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
 
-  auto* indirect_buffer_data =
-      context_.map<VkDrawIndirectCommand>(indirect_buffer).value();
-  bool is_empty_chunk = indirect_buffer_data->vertexCount == 0;
-  context_.unmap(indirect_buffer);
-
-  if (is_empty_chunk) {
-    vkh::destroy_buffer(context_, vertex_buffer);
-    vkh::destroy_buffer(context_, indirect_buffer);
-  } else {
-    vertex_cache_.emplace_back(vertex_buffer, indirect_buffer, transform);
-  }
+  vertex_cache_.emplace_back(vertex_buffer, indirect_buffer, transform);
 }

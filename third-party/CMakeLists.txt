@@ -38,5 +38,7 @@ if (VOXEL_GAME_ENABLE_PCH)
             )
 endif ()
 
-target_link_libraries(imgui CONAN_PKG::glfw)
+find_package(glfw3 REQUIRED)
+
+target_link_libraries(imgui glfw::glfw)
 add_library(third_party::imgui ALIAS imgui)

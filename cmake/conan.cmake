@@ -16,5 +16,6 @@ macro(run_conan)
             gsl_microsoft/2.0.0@bincrafters/stable
             backward-cpp/1.5
             BASIC_SETUP CMAKE_TARGETS
+            GENERATORS cmake_find_package
             BUILD missing)
 endmacro()
