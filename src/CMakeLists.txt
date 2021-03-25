@@ -54,7 +54,7 @@ add_library(common
         vulkan_helpers/descriptor_allocator.cpp
         vulkan_helpers/descriptor_allocator.hpp
         vulkan_helpers/descriptor_pool.cpp
-        vulkan_helpers/descriptor_pool.hpp)
+        vulkan_helpers/descriptor_pool.hpp vulkan_helpers/swapchain.cpp vulkan_helpers/swapchain.hpp)
 target_link_libraries(common
         PUBLIC
         CONAN_PKG::fmt

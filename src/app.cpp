@@ -76,20 +76,18 @@ void mouse_button_callback(GLFWwindow* window, int button, int action,
   }
 }
 
+static constexpr int window_width = 1400;
+static constexpr int window_height = 900;
+
 } // anonymous namespace
 
-App::App() : window_manager_{&WindowManager::instance()}
+App::App()
+    : window_manager_{&WindowManager::instance()},
+      window_{Window(window_width, window_height, "Voxel Game")},
+      window_extent_{VkExtent2D{static_cast<std::uint32_t>(window_width),
+                                static_cast<std::uint32_t>(window_height)}}
 {
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  static constexpr int window_width = 1400;
-  static constexpr int window_height = 900;
-  window_ = Window(window_width, window_height, "Voxel Game");
-  window_extent_ = VkExtent2D{static_cast<std::uint32_t>(window_width),
-                              static_cast<std::uint32_t>(window_height)};
-
   glfwMakeContextCurrent(window_.glfw_window());
-
   glfwSetKeyCallback(window_.glfw_window(), key_callback);
   glfwSetWindowUserPointer(window_.glfw_window(), this);
   glfwSetCursorPosCallback(window_.glfw_window(), cursor_position_callback);
@@ -147,13 +145,9 @@ App::~App()
   for (auto& framebuffer : framebuffers_) {
     vkDestroyFramebuffer(context_.device(), framebuffer, nullptr);
   }
-  for (auto& image_view : swapchain_image_views_) {
-    vkDestroyImageView(context_.device(), image_view, nullptr);
-  }
   vkDestroyImageView(context_.device(), depth_image_view_, nullptr);
   vmaDestroyImage(context_.allocator(), depth_image_.image,
                   depth_image_.allocation);
-  vkDestroySwapchainKHR(context_.device(), swapchain_, nullptr);
 }
 
 void App::move_camera(FirstPersonCamera::Movement movement)
@@ -191,20 +185,9 @@ void App::exec()
 
 void App::init_swapchain()
 {
-  vkb::SwapchainBuilder swapchain_builder{
-      context_.physical_device(), context_.device(), context_.surface()};
-
-  vkb::Swapchain vkb_swapchain =
-      swapchain_builder.use_default_format_selection()
-          .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-          .set_desired_extent(window_extent_.width, window_extent_.height)
-          .build()
-          .value();
-
-  swapchain_ = vkb_swapchain.swapchain;
-  swapchain_images_ = vkb_swapchain.get_images().value();
-  swapchain_image_views_ = vkb_swapchain.get_image_views().value();
-  swapchain_image_format_ = vkb_swapchain.image_format;
+  swapchain_ = vkh::Swapchain(context_, {
+                                            .extent = window_extent_,
+                                        });
 
   depth_image_format_ = VK_FORMAT_D32_SFLOAT;
 
@@ -290,7 +273,7 @@ void App::init_render_pass()
   // the renderpass will use this color attachment.
   const VkAttachmentDescription color_attachment = {
       .flags = 0,
-      .format = swapchain_image_format_,
+      .format = swapchain_.image_format(),
       .samples = VK_SAMPLE_COUNT_1_BIT,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -369,12 +352,12 @@ void App::init_framebuffer()
 
   // grab how many images we have in the swapchain
   const auto swapchain_imagecount =
-      static_cast<std::uint32_t>(swapchain_images_.size());
+      static_cast<std::uint32_t>(swapchain_.images().size());
   framebuffers_ = std::vector<VkFramebuffer>(swapchain_imagecount);
 
   // create framebuffers for each of the swapchain image views
   for (std::uint32_t i = 0; i < swapchain_imagecount; ++i) {
-    const VkImageView attachments[] = {swapchain_image_views_[i],
+    const VkImageView attachments[] = {swapchain_.image_views()[i],
                                        depth_image_view_};
     framebuffer_create_info.pAttachments = beyond::to_pointer(attachments);
     framebuffer_create_info.attachmentCount = beyond::size(attachments);
@@ -758,13 +741,14 @@ void App::render()
   VK_CHECK(vkQueueSubmit(context_.graphics_queue(), 1, &submit_info,
                          current_frame_data.render_fence));
 
+  const VkSwapchainKHR swapchain = swapchain_.get();
   const VkPresentInfoKHR present_info = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .pNext = nullptr,
       .waitSemaphoreCount = 1,
       .pWaitSemaphores = &current_frame_data.render_semaphore,
       .swapchainCount = 1,
-      .pSwapchains = &swapchain_,
+      .pSwapchains = &swapchain,
       .pImageIndices = &swapchain_image_index,
   };
 

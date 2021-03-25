@@ -5,8 +5,10 @@
 #include <GLFW/glfw3.h>
 
 Window::Window(int width, int height, const char* title)
-    : window_{glfwCreateWindow(width, height, title, nullptr, nullptr)}
 {
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  window_ = glfwCreateWindow(width, height, title, nullptr, nullptr);
   if (!window_) { beyond::panic("Cannot create a glfw window"); }
 }
 

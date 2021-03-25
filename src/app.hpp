@@ -21,6 +21,7 @@
 #include "vulkan_helpers/context.hpp"
 #include "vulkan_helpers/deletion_queue.hpp"
 #include "vulkan_helpers/graphics_pipeline.hpp"
+#include "vulkan_helpers/swapchain.hpp"
 
 #include "first_person_camera.hpp"
 #include "terrain/chunk_manager.hpp"
@@ -67,11 +68,7 @@ class App {
 
   vkh::Context context_;
   vkh::DeletionQueue deletion_queue_;
-
-  VkSwapchainKHR swapchain_{};
-  std::vector<VkImage> swapchain_images_{};
-  std::vector<VkImageView> swapchain_image_views_{};
-  VkFormat swapchain_image_format_{};
+  vkh::Swapchain swapchain_;
 
   VkImageView depth_image_view_{};
   AllocatedImage depth_image_{};
