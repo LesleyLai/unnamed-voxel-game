@@ -716,7 +716,7 @@ void App::render()
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(beyond::Vec4),
                        &cache.transform);
     vkCmdBindVertexBuffers(cmd, 0, 1, &cache.vertex_buffer.buffer, &offset);
-    vkCmdDrawIndirect(cmd, cache.indirect_buffer, 0, 1, 0);
+    vkCmdDraw(cmd, cache.vertex_count, 1, 0, 0);
   }
 
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);

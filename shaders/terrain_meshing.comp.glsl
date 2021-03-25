@@ -11,13 +11,10 @@ layout( push_constant ) uniform constants
   vec4 transform;
 } PushConstants;
 
-layout(binding = 0) buffer indirect_buffer
+layout(binding = 0) buffer reduced_buffer
 {
-  uint    vertexCount;
-  uint    instanceCount;
-  uint    firstVertex;
-  uint    firstInstance;
-} indirect;
+  uint vertex_count;
+};
 
 struct Vertex {
   vec4 position;// 4th dimension corrently unused
@@ -156,7 +153,7 @@ void polygonize(GridCell cell, float isolevel) {
     ++triangle_count;
   }
 
-  uint vertex_index = atomicAdd(indirect.vertexCount, triangle_count * 3);
+  uint vertex_index = atomicAdd(vertex_count, triangle_count * 3);
   for (uint i = 0; i < triangle_count; ++i) {
     vec3 p0 = triangles[i].p[0];
     vec3 p1 = triangles[i].p[1];

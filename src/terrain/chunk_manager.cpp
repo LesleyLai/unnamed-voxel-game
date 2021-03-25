@@ -11,6 +11,14 @@
 #include <beyond/utils/size.hpp>
 #include <beyond/utils/to_pointer.hpp>
 
+namespace {
+
+struct TerrainReducedBuffer {
+  uint32_t vertex_count = 0;
+};
+
+} // anonymous namespace
+
 ChunkManager::ChunkManager(vkh::Context& context)
     : context_{context},
       edge_table_buffer_{generate_edge_table_buffer(context).value()},
@@ -115,6 +123,16 @@ ChunkManager::ChunkManager(vkh::Context& context)
                                       chunk_dimension * chunk_dimension;
   constexpr size_t vertex_buffer_size = sizeof(Vertex) * max_vertex_count;
 
+  terrain_reduced_scratch_buffer_ =
+      vkh::create_buffer_from_data(
+          context_,
+          {.size = sizeof(std::uint32_t),
+           .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+           .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+           .debug_name = "Terrain Reduced Scratch Buffer"},
+          TerrainReducedBuffer{})
+          .value();
+
   terrain_vertex_scratch_buffer_ =
       vkh::create_buffer(context_,
                          {.size = vertex_buffer_size,
@@ -137,9 +155,9 @@ ChunkManager::~ChunkManager()
 
   for (auto cache : vertex_cache_) {
     vkh::destroy_buffer(context_, cache.vertex_buffer);
-    vkh::destroy_buffer(context_, cache.indirect_buffer);
   }
 
+  vkh::destroy_buffer(context_, terrain_reduced_scratch_buffer_);
   vkh::destroy_buffer(context_, terrain_vertex_scratch_buffer_);
   vkh::destroy_buffer(context_, triangle_table_buffer_);
   vkh::destroy_buffer(context_, edge_table_buffer_);
@@ -147,23 +165,6 @@ ChunkManager::~ChunkManager()
 
 void ChunkManager::load_chunk(beyond::IVec3 position)
 {
-  static constexpr VkDrawIndirectCommand indirect_command{
-      .vertexCount = 0,
-      .instanceCount = 1,
-      .firstVertex = 0,
-      .firstInstance = 0,
-  };
-  vkh::Buffer indirect_buffer =
-      vkh::create_buffer_from_data(
-          context_,
-          {.size = sizeof(VkDrawIndirectCommand),
-           .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-           .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-           .debug_name =
-               fmt::format("Chunk Indirect Buffer {}", position).c_str()},
-          indirect_command)
-          .value();
 
   const auto chunk_x = static_cast<float>(chunk_dimension * position.x);
   const auto chunk_y = static_cast<float>(chunk_dimension * position.y);
@@ -171,7 +172,7 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
   beyond::Vec4 transform{chunk_x, chunk_y, chunk_z, 1.f};
 
   const VkDescriptorBufferInfo indirect_descriptor_buffer_info = {
-      indirect_buffer, 0, VK_WHOLE_SIZE};
+      terrain_reduced_scratch_buffer_, 0, VK_WHOLE_SIZE};
   const VkDescriptorBufferInfo out_descriptor_buffer_info = {
       terrain_vertex_scratch_buffer_, 0, VK_WHOLE_SIZE};
   const VkDescriptorBufferInfo edge_table_descriptor_buffer_info = {
@@ -244,17 +245,16 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
 
   const std::uint32_t vertex_count = [&]() {
     auto* indirect_buffer_data =
-        context_.map<VkDrawIndirectCommand>(indirect_buffer).value();
-    std::uint32_t result = indirect_buffer_data->vertexCount;
-    context_.unmap(indirect_buffer);
+        context_.map<TerrainReducedBuffer>(terrain_reduced_scratch_buffer_)
+            .value();
+    std::uint32_t result = indirect_buffer_data->vertex_count;
+    indirect_buffer_data->vertex_count = 0;
+    context_.unmap(terrain_reduced_scratch_buffer_);
     return result;
   }();
   const bool is_empty_chunk = vertex_count == 0;
 
-  if (is_empty_chunk) {
-    vkh::destroy_buffer(context_, indirect_buffer);
-    return;
-  }
+  if (is_empty_chunk) { return; }
 
   const std::uint32_t vertex_buffer_size = vertex_count * sizeof(Vertex);
   vkh::Buffer vertex_buffer =
@@ -304,5 +304,5 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
   vkResetFences(context_.device(), 1, &meshing_fence_);
   vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
 
-  vertex_cache_.emplace_back(vertex_buffer, indirect_buffer, transform);
+  vertex_cache_.emplace_back(vertex_buffer, vertex_count, transform);
 }

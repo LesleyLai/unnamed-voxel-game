@@ -10,7 +10,7 @@
 
 struct ChunkVertexCache {
   vkh::Buffer vertex_buffer{};
-  vkh::Buffer indirect_buffer{};
+  std::uint32_t vertex_count = 0;
   beyond::Vec4 transform; // x, y, z for translation, w for scaling
 };
 
@@ -29,6 +29,7 @@ class ChunkManager {
   vkh::Buffer triangle_table_buffer_;
 
   vkh::Buffer terrain_vertex_scratch_buffer_;
+  vkh::Buffer terrain_reduced_scratch_buffer_;
 
   std::vector<ChunkVertexCache> vertex_cache_;
 
