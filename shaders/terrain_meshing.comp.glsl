@@ -57,9 +57,9 @@ const vec3 corner_offsets[8] =
     vec3(-0.5f, 0.5f, 0.5f)
   );
 
-float hash(float p) { p = fract(p * 0.011); p *= p + 7.5; p *= p + p; return fract(p); }
+float hash(in float p) { p = fract(p * 0.011); p *= p + 7.5; p *= p + p; return fract(p); }
 
-float perlin(vec3 x) {
+float perlin(in vec3 x) {
   const vec3 step = vec3(110, 241, 171);
 
   vec3 i = floor(x);
@@ -75,28 +75,39 @@ float perlin(vec3 x) {
 }
 
 // Fractal Brownian Motion
-float fbm(vec3 x) {
-  const int noise_octaves_count = 9;
+struct FBM_Params {
+  int octave_count;
+  float amplitude;
+  float frequency;
+  float lacunarity;
+  float gain;
+};
+
+float fbm3(in vec3 x, in FBM_Params params) {
   float v = 0.0;
-  float a = 0.5;
-  vec3 shift = vec3(100);
-  for (int i = 0; i < noise_octaves_count; ++i) {
-    v += a * perlin(x);
-    x = x * 2.0 + shift;
-    a *= 0.5;
+  for (int i = 0; i < params.octave_count; ++i) {
+    v += params.amplitude * perlin(params.frequency * x);
+    x = x * params.lacunarity;
+    params.amplitude *= params.gain;
   }
   return v;
 }
 
-float noise(vec3 pt) {
-  return fbm(pt / 20.) - 0.5 - pt.y * 0.01;
+float noise(in vec3 pt) {
+  FBM_Params params;
+  params.octave_count = 6;
+  params.amplitude = 0.5;
+  params.frequency = 0.01;
+  params.lacunarity = 2.0;
+  params.gain = 0.5;
+  return fbm3(pt, params) - 0.5 - pt.y * 0.01;
 }
 
-float inverse_lerp(float a, float b, float v) {
+float inverse_lerp(in float a, in float b, in float v) {
   return (v - a) / (b - a);
 }
 
-vec3 vertex_interp(float isolevel, vec3 p1, vec3 p2, float valp1, float valp2) {
+vec3 vertex_interp(in float isolevel, in vec3 p1, in vec3 p2, in float valp1, in float valp2) {
   if (abs(isolevel - valp1) < 0.00001f) { return p1; }
   if (abs(isolevel - valp2) < 0.00001f) { return p2; }
   if (abs(valp1 - valp2) < 0.00001f) { return p1; }
@@ -118,7 +129,7 @@ const uvec2 cornor_table[12] = uvec2[](
   uvec2(3, 7)
 );
 
-void polygonize(GridCell cell, float isolevel) {
+void polygonize(in GridCell cell, in float isolevel) {
   uint cubeindex = 0;
   for (uint i = 0; i < 8; ++i) {
     if (cell.val[i] < isolevel) {

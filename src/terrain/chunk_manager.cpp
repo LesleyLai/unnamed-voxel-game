@@ -332,5 +332,5 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
   ChunkVertexCache vertex_cache =
       copy_mesh_from_scratch_buffer(vertex_count, position);
   vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
-  vertex_cache_.push_back(std::move(vertex_cache));
+  vertex_cache_.push_back(vertex_cache);
 }
