@@ -4,9 +4,11 @@
 #include "../vulkan_helpers/buffer.hpp"
 #include "../vulkan_helpers/context.hpp"
 
+#include <beyond/math/point.hpp>
 #include <beyond/math/vector.hpp>
 
 #include <span>
+#include <unordered_set>
 
 struct ChunkVertexCache {
   vkh::Buffer vertex_buffer{};
@@ -31,6 +33,7 @@ class ChunkManager {
   vkh::Buffer terrain_vertex_scratch_buffer_;
   vkh::Buffer terrain_reduced_scratch_buffer_;
 
+  std::unordered_set<beyond::IVec3> loaded_chunks_;
   std::vector<ChunkVertexCache> vertex_cache_;
 
 public:
@@ -43,7 +46,7 @@ public:
   ChunkManager(ChunkManager&&) noexcept = delete;
   auto operator=(ChunkManager&&) & noexcept -> ChunkManager& = delete;
 
-  void load_chunk(beyond::IVec3 position);
+  void update(beyond::Point3 position);
 
   [[nodiscard]] auto vertex_cache() -> std::span<ChunkVertexCache>
   {
@@ -51,6 +54,8 @@ public:
   }
 
 private:
+  void load_chunk(beyond::IVec3 position);
+
   static auto calculate_chunk_transform(beyond::IVec3 position) -> beyond::Vec4;
   void update_write_descriptor_set();
   void generate_chunk_mesh(beyond::IVec3 position);

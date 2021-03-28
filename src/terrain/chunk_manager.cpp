@@ -170,6 +170,7 @@ ChunkManager::calculate_chunk_transform(beyond::IVec3 position) -> beyond::Vec4
   const auto chunk_x = static_cast<float>(chunk_dimension * position.x);
   const auto chunk_y = static_cast<float>(chunk_dimension * position.y);
   const auto chunk_z = static_cast<float>(chunk_dimension * position.z);
+
   return beyond::Vec4{chunk_x, chunk_y, chunk_z, 1.f};
 }
 
@@ -316,6 +317,28 @@ void ChunkManager::generate_chunk_mesh(beyond::IVec3 position)
   indirect_buffer_data->vertex_count = 0;
   context_.unmap(terrain_reduced_scratch_buffer_);
   return count;
+}
+
+void ChunkManager::update(beyond::Point3 position)
+{
+  const int x =
+      (static_cast<int>(position.x) + chunk_dimension / 2) / chunk_dimension;
+  const int y =
+      (static_cast<int>(position.y) + chunk_dimension / 2) / chunk_dimension;
+  const int z =
+      (static_cast<int>(position.z) + chunk_dimension / 2) / chunk_dimension;
+
+  for (int zz = -5 + z; zz <= 5 + z; ++zz) {
+    for (int xx = -5 + x; xx <= 5 + x; ++xx) {
+      for (int yy = -5 + y; yy <= 5 + y; ++yy) {
+        const auto chunk_coord = beyond::IVec3{xx, yy, zz};
+        if (!loaded_chunks_.contains(chunk_coord)) {
+          loaded_chunks_.insert(chunk_coord);
+          load_chunk(chunk_coord);
+        }
+      }
+    }
+  }
 }
 
 void ChunkManager::load_chunk(beyond::IVec3 position)

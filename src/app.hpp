@@ -89,7 +89,7 @@ class App {
 
   std::unique_ptr<ChunkManager> chunk_manager_{};
 
-  FirstPersonCamera camera_{beyond::Vec3(0.0f, 0.0f, 5.0f)};
+  FirstPersonCamera camera_{beyond::Vec3(0.0f, -50.0f, 0.0f)};
   MouseDraggingState dragging_ = MouseDraggingState::No;
   float last_mouse_x_{};
   float last_mouse_y_{};

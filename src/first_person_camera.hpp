@@ -10,8 +10,8 @@
 // Default camera values
 constexpr float default_yaw = -90.0f;
 constexpr float default_pitch = 0.0f;
-constexpr float default_speed = 5.0f;
-constexpr float default_mouse_sensitivity = 0.1f;
+constexpr float default_speed = 20.0f;
+constexpr float default_mouse_sensitivity = 0.05f;
 constexpr float default_zoom = 45.0f;
 
 // An abstract camera class that processes input and calculates the
@@ -56,6 +56,11 @@ public:
         zoom_(default_zoom)
   {
     update_camera_vectors();
+  }
+
+  [[nodiscard]] auto position() const noexcept -> beyond::Point3
+  {
+    return position_;
   }
 
   // returns the view matrix calculated using Euler Angles and the LookAt Matrix

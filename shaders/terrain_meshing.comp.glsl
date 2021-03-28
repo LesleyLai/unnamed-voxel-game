@@ -69,9 +69,9 @@ float perlin(in vec3 x) {
 
   vec3 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix( hash(n + dot(step, vec3(0, 0, 0))), hash(n + dot(step, vec3(1, 0, 0))), u.x),
-  mix( hash(n + dot(step, vec3(0, 1, 0))), hash(n + dot(step, vec3(1, 1, 0))), u.x), u.y),
-  mix(mix( hash(n + dot(step, vec3(0, 0, 1))), hash(n + dot(step, vec3(1, 0, 1))), u.x),
-  mix( hash(n + dot(step, vec3(0, 1, 1))), hash(n + dot(step, vec3(1, 1, 1))), u.x), u.y), u.z);
+         mix( hash(n + dot(step, vec3(0, 1, 0))), hash(n + dot(step, vec3(1, 1, 0))), u.x), u.y),
+         mix(mix( hash(n + dot(step, vec3(0, 0, 1))), hash(n + dot(step, vec3(1, 0, 1))), u.x),
+         mix( hash(n + dot(step, vec3(0, 1, 1))), hash(n + dot(step, vec3(1, 1, 1))), u.x), u.y), u.z);
 }
 
 // Fractal Brownian Motion
@@ -97,7 +97,7 @@ float noise(in vec3 pt) {
   FBM_Params params;
   params.octave_count = 6;
   params.amplitude = 0.5;
-  params.frequency = 0.01;
+  params.frequency = 0.02;
   params.lacunarity = 2.0;
   params.gain = 0.5;
   return fbm3(pt, params) - 0.5 - pt.y * 0.01;

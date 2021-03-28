@@ -105,7 +105,6 @@ App::App()
   init_descriptors();
   init_pipeline();
   chunk_manager_ = std::make_unique<ChunkManager>(context_);
-  generate_mesh();
 }
 
 App::~App()
@@ -176,6 +175,8 @@ void App::mouse_move(float x, float y)
 void App::exec()
 {
   while (!window_.should_close()) {
+    chunk_manager_->update(camera_.position());
+
     render();
 
     window_.swap_buffers();
@@ -755,17 +756,6 @@ void App::render()
   VK_CHECK(vkQueuePresentKHR(context_.present_queue(), &present_info));
 
   ++frame_number_;
-}
-
-void App::generate_mesh()
-{
-  for (int z = -3; z <= 10; ++z) {
-    for (int x = -5; x <= 5; ++x) {
-      for (int y = -5; y <= 5; ++y) {
-        chunk_manager_->load_chunk(beyond::IVec3{x, z, y});
-      }
-    }
-  }
 }
 
 auto App::get_current_frame() -> FrameData&
