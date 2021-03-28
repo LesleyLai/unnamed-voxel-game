@@ -8,7 +8,7 @@
 #include <beyond/math/vector.hpp>
 
 #include <span>
-#include <unordered_set>
+#include <unordered_map>
 
 struct ChunkVertexCache {
   vkh::Buffer vertex_buffer{};
@@ -18,12 +18,13 @@ struct ChunkVertexCache {
 };
 
 struct VertexCachePool {
-  static constexpr std::size_t vertex_cache_pool_size = 1000;
+  static constexpr std::size_t vertex_cache_pool_size = 3000;
 
+  VmaAllocator allocator = VK_NULL_HANDLE;
   ChunkVertexCache vertex_cache_pool[vertex_cache_pool_size];
   ChunkVertexCache* vertex_cache_pool_first_available = vertex_cache_pool;
 
-  VertexCachePool()
+  explicit VertexCachePool(VmaAllocator a) : allocator{a}
   {
     for (std::size_t i = 0; i < vertex_cache_pool_size - 1; ++i) {
       vertex_cache_pool[i].next = &vertex_cache_pool[i + 1];
@@ -31,13 +32,24 @@ struct VertexCachePool {
     // Next pointer of the last element will be nullptr
   }
 
-  void add(ChunkVertexCache vertex_cache)
+  auto add(ChunkVertexCache cache_to_add) -> ChunkVertexCache&
   {
     // When we exhaust the pool
     BEYOND_ENSURE(vertex_cache_pool_first_available != nullptr);
     ChunkVertexCache& cache = *vertex_cache_pool_first_available;
     vertex_cache_pool_first_available = cache.next;
-    cache = vertex_cache;
+    cache = cache_to_add;
+    return cache;
+  }
+
+  void remove(ChunkVertexCache& reference)
+  {
+    // TODO: Find a way to gracefully delete buffers
+    vmaDestroyBuffer(allocator, reference.vertex_buffer.buffer,
+                     reference.vertex_buffer.allocation);
+    reference = ChunkVertexCache{};
+    reference.next = vertex_cache_pool_first_available;
+    vertex_cache_pool_first_available = &reference;
   }
 };
 
@@ -58,7 +70,7 @@ class ChunkManager {
   vkh::Buffer terrain_vertex_scratch_buffer_;
   vkh::Buffer terrain_reduced_scratch_buffer_;
 
-  std::unordered_set<beyond::IVec3> loaded_chunks_;
+  std::unordered_map<beyond::IVec3, ChunkVertexCache*> loaded_chunks_;
   VertexCachePool vertex_caches_;
 
 public:
@@ -79,7 +91,7 @@ public:
   }
 
 private:
-  void load_chunk(beyond::IVec3 position);
+  [[nodiscard]] auto load_chunk(beyond::IVec3 position) -> ChunkVertexCache*;
 
   static auto calculate_chunk_transform(beyond::IVec3 position) -> beyond::Vec4;
   void update_write_descriptor_set();

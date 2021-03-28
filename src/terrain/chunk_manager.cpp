@@ -23,7 +23,8 @@ struct TerrainReducedBuffer {
 ChunkManager::ChunkManager(vkh::Context& context)
     : context_{context},
       edge_table_buffer_{generate_edge_table_buffer(context).value()},
-      triangle_table_buffer_{generate_triangle_table_buffer(context).value()}
+      triangle_table_buffer_{generate_triangle_table_buffer(context).value()},
+      vertex_caches_(context.allocator())
 {
   const VkDescriptorPoolSize pool_sizes[] = {
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4}};
@@ -334,15 +335,26 @@ void ChunkManager::update(beyond::Point3 position)
       for (int yy = -5 + y; yy <= 5 + y; ++yy) {
         const auto chunk_coord = beyond::IVec3{xx, yy, zz};
         if (!loaded_chunks_.contains(chunk_coord)) {
-          loaded_chunks_.insert(chunk_coord);
-          load_chunk(chunk_coord);
+          ChunkVertexCache* vertex_cache_ptr = load_chunk(chunk_coord);
+          loaded_chunks_.emplace(chunk_coord, vertex_cache_ptr);
         }
       }
     }
   }
+
+  //  for (auto [chunk_coord, vertex_cache_ptr] : loaded_chunks_) {
+  //    if (chunk_coord.x < -5 + x || chunk_coord.x > 5 + x ||
+  //        chunk_coord.y < -5 + y || chunk_coord.y > 5 + y ||
+  //        chunk_coord.z < -5 + z || chunk_coord.z > 5 + z) {
+  //      if (vertex_cache_ptr != nullptr) {
+  //        vertex_caches_.remove(*vertex_cache_ptr);
+  //      }
+  //    }
+  //  }
 }
 
-void ChunkManager::load_chunk(beyond::IVec3 position)
+[[nodiscard]] auto ChunkManager::load_chunk(beyond::IVec3 position)
+    -> ChunkVertexCache*
 {
   update_write_descriptor_set();
 
@@ -351,10 +363,10 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
   const uint32_t vertex_count = get_vertex_count();
   const bool is_empty_chunk = vertex_count == 0;
 
-  if (is_empty_chunk) { return; }
+  if (is_empty_chunk) { return nullptr; }
 
   ChunkVertexCache vertex_cache =
       copy_mesh_from_scratch_buffer(vertex_count, position);
   vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
-  vertex_caches_.add(vertex_cache);
+  return &vertex_caches_.add(vertex_cache);
 }
