@@ -712,7 +712,8 @@ void App::render()
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           terrain_graphics_pipeline_layout_, 0, 1,
                           &current_frame_data.global_descriptor, 0, nullptr);
-  for (ChunkVertexCache cache : chunk_manager_->vertex_cache()) {
+  for (const ChunkVertexCache& cache : chunk_manager_->vertex_caches()) {
+    if (cache.vertex_count == 0) continue;
     vkCmdPushConstants(cmd, terrain_graphics_pipeline_layout_,
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(beyond::Vec4),
                        &cache.transform);

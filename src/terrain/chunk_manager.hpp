@@ -14,6 +14,31 @@ struct ChunkVertexCache {
   vkh::Buffer vertex_buffer{};
   std::uint32_t vertex_count = 0;
   beyond::Vec4 transform; // x, y, z for translation, w for scaling
+  ChunkVertexCache* next = nullptr;
+};
+
+struct VertexCachePool {
+  static constexpr std::size_t vertex_cache_pool_size = 1000;
+
+  ChunkVertexCache vertex_cache_pool[vertex_cache_pool_size];
+  ChunkVertexCache* vertex_cache_pool_first_available = vertex_cache_pool;
+
+  VertexCachePool()
+  {
+    for (std::size_t i = 0; i < vertex_cache_pool_size - 1; ++i) {
+      vertex_cache_pool[i].next = &vertex_cache_pool[i + 1];
+    }
+    // Next pointer of the last element will be nullptr
+  }
+
+  void add(ChunkVertexCache vertex_cache)
+  {
+    // When we exhaust the pool
+    BEYOND_ENSURE(vertex_cache_pool_first_available != nullptr);
+    ChunkVertexCache& cache = *vertex_cache_pool_first_available;
+    vertex_cache_pool_first_available = cache.next;
+    cache = vertex_cache;
+  }
 };
 
 class ChunkManager {
@@ -34,7 +59,7 @@ class ChunkManager {
   vkh::Buffer terrain_reduced_scratch_buffer_;
 
   std::unordered_set<beyond::IVec3> loaded_chunks_;
-  std::vector<ChunkVertexCache> vertex_cache_;
+  VertexCachePool vertex_caches_;
 
 public:
   static constexpr int chunk_dimension = 32;
@@ -48,9 +73,9 @@ public:
 
   void update(beyond::Point3 position);
 
-  [[nodiscard]] auto vertex_cache() -> std::span<ChunkVertexCache>
+  [[nodiscard]] auto vertex_caches() -> std::span<ChunkVertexCache>
   {
-    return vertex_cache_;
+    return vertex_caches_.vertex_cache_pool;
   }
 
 private:

@@ -154,7 +154,8 @@ ChunkManager::~ChunkManager()
                                nullptr);
   vkDestroyDescriptorPool(context_.device(), descriptor_pool_, nullptr);
 
-  for (auto cache : vertex_cache_) {
+  for (auto cache : vertex_caches_.vertex_cache_pool) {
+    if (cache.vertex_count == 0) { continue; }
     vkh::destroy_buffer(context_, cache.vertex_buffer);
   }
 
@@ -355,5 +356,5 @@ void ChunkManager::load_chunk(beyond::IVec3 position)
   ChunkVertexCache vertex_cache =
       copy_mesh_from_scratch_buffer(vertex_count, position);
   vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
-  vertex_cache_.push_back(vertex_cache);
+  vertex_caches_.add(vertex_cache);
 }

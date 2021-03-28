@@ -20,8 +20,8 @@ struct BufferCreateInfo {
 };
 
 struct [[nodiscard]] Buffer {
-  VkBuffer buffer{};
-  VmaAllocation allocation{};
+  VkBuffer buffer = VK_NULL_HANDLE;
+  VmaAllocation allocation = VK_NULL_HANDLE;
 
   explicit(false) operator VkBuffer()
   {
