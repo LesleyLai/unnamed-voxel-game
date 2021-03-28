@@ -116,16 +116,6 @@ public:
   }
   void mouse_move(float x, float y);
 
-  [[nodiscard]] auto render_mode() const noexcept -> RenderMode
-  {
-    return render_mode_;
-  }
-
-  void set_render_mode(RenderMode render_mode) noexcept
-  {
-    render_mode_ = render_mode;
-  }
-
 private:
   void init_swapchain();
   void init_command();

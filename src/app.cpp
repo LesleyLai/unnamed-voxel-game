@@ -17,8 +17,6 @@
 #include "vulkan_helpers/descriptor_pool.hpp"
 #include "vulkan_helpers/error_handling.hpp"
 
-#include "terrain/marching_cube_tables.hpp"
-
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
@@ -618,14 +616,23 @@ void App::render_gui()
 
   ImGui::Begin("Options");
 
-  ImGui::Text("Render Mode:");
-
-  int render_mode_int = static_cast<int>(render_mode_);
-  ImGui::RadioButton("Faces", &render_mode_int, 0);
-  ImGui::SameLine();
-  ImGui::RadioButton("Wireframe", &render_mode_int, 1);
-  render_mode_ = static_cast<RenderMode>(render_mode_int);
-
+  ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
+  if (ImGui::BeginTabBar("Settings", tab_bar_flags)) {
+    if (ImGui::BeginTabItem("Render")) {
+      ImGui::Text("Render Mode:");
+      int render_mode_int = static_cast<int>(render_mode_);
+      ImGui::RadioButton("Faces", &render_mode_int, 0);
+      ImGui::SameLine();
+      ImGui::RadioButton("Wireframe", &render_mode_int, 1);
+      render_mode_ = static_cast<RenderMode>(render_mode_int);
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Terrain Generation")) {
+      chunk_manager_->draw_gui();
+      ImGui::EndTabItem();
+    }
+    ImGui::EndTabBar();
+  }
   ImGui::End();
 
   // imgui commands

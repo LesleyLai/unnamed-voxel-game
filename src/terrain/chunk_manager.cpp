@@ -12,6 +12,8 @@
 #include <beyond/utils/size.hpp>
 #include <beyond/utils/to_pointer.hpp>
 
+#include <imgui.h>
+
 namespace {
 
 struct TerrainReducedBuffer {
@@ -323,6 +325,8 @@ void ChunkManager::generate_chunk_mesh(beyond::IVec3 position)
 
 void ChunkManager::update(beyond::Point3 position)
 {
+  if (!generating_terrain_) { return; }
+
   const int x =
       (static_cast<int>(position.x) + chunk_dimension / 2) / chunk_dimension;
   const int y =
@@ -369,4 +373,10 @@ void ChunkManager::update(beyond::Point3 position)
       copy_mesh_from_scratch_buffer(vertex_count, position);
   vkResetCommandPool(context_.device(), meshing_command_pool_, 0);
   return &vertex_caches_.add(vertex_cache);
+}
+
+void ChunkManager::draw_gui()
+{
+  ImGui::Text("Terrain Generation");
+  ImGui::Checkbox("Generating", &generating_terrain_);
 }

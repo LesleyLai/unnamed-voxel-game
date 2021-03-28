@@ -73,6 +73,8 @@ class ChunkManager {
   std::unordered_map<beyond::IVec3, ChunkVertexCache*> loaded_chunks_;
   VertexCachePool vertex_caches_;
 
+  bool generating_terrain_ = true;
+
 public:
   static constexpr int chunk_dimension = 32;
 
@@ -89,6 +91,16 @@ public:
   {
     return vertex_caches_.vertex_cache_pool;
   }
+
+  [[nodiscard]] auto is_generating_terrain() -> bool
+  {
+    return generating_terrain_;
+  }
+  void set_generating_terrain(bool is_generating_Terrain)
+  {
+    generating_terrain_ = is_generating_Terrain;
+  }
+  void draw_gui();
 
 private:
   [[nodiscard]] auto load_chunk(beyond::IVec3 position) -> ChunkVertexCache*;
