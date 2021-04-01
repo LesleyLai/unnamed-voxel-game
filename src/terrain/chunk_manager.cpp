@@ -8,6 +8,7 @@
 #include "../vulkan_helpers/shader_module.hpp"
 #include "../vulkan_helpers/sync.hpp"
 
+#include <beyond/coroutine/generator.hpp>
 #include <beyond/math/serial.hpp>
 #include <beyond/utils/size.hpp>
 #include <beyond/utils/to_pointer.hpp>
@@ -323,6 +324,28 @@ void ChunkManager::generate_chunk_mesh(beyond::IVec3 position)
   return count;
 }
 
+using ChunkMap = std::unordered_map<beyond::IVec3, ChunkVertexCache*>;
+
+auto chunks_to_load(const ChunkMap& loaded_chunks, beyond::IVec3 center)
+    -> beyond::Generator<beyond::IVec3>
+{
+  for (int radius = 0; radius < 5; ++radius) {
+    for (int x = -radius; x <= radius; ++x) {
+      for (int y = -radius; y <= radius; ++y) {
+        for (int z = -radius; z <= radius; ++z) {
+          if (std::abs(x) < radius && std::abs(y) < radius &&
+              std::abs(z) < radius) {
+            continue;
+          }
+
+          const auto chunk_coord = beyond::IVec3{x, y, z} + center;
+          if (!loaded_chunks.contains(chunk_coord)) { co_yield chunk_coord; }
+        }
+      }
+    }
+  }
+}
+
 void ChunkManager::update(beyond::Point3 position)
 {
   if (!generating_terrain_) { return; }
@@ -334,16 +357,9 @@ void ChunkManager::update(beyond::Point3 position)
   const int z =
       (static_cast<int>(position.z) + chunk_dimension / 2) / chunk_dimension;
 
-  for (int zz = -5 + z; zz <= 5 + z; ++zz) {
-    for (int xx = -5 + x; xx <= 5 + x; ++xx) {
-      for (int yy = -5 + y; yy <= 5 + y; ++yy) {
-        const auto chunk_coord = beyond::IVec3{xx, yy, zz};
-        if (!loaded_chunks_.contains(chunk_coord)) {
-          ChunkVertexCache* vertex_cache_ptr = load_chunk(chunk_coord);
-          loaded_chunks_.emplace(chunk_coord, vertex_cache_ptr);
-        }
-      }
-    }
+  for (beyond::IVec3 chunk_coord :
+       chunks_to_load(loaded_chunks_, beyond::IVec3{x, y, z})) {
+    loaded_chunks_.emplace(chunk_coord, load_chunk(chunk_coord));
   }
 
   //  for (auto [chunk_coord, vertex_cache_ptr] : loaded_chunks_) {

@@ -43,6 +43,7 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
                 -Wlogical-op
                 -Wuseless-cast
                 -Wno-missing-field-initializers
+                -fcoroutines
                 )
     endif ()
 endif ()
